@@ -1,0 +1,1337 @@
+openapi: 3.0.3
+info:
+  title: TikTok Shop AI Video System API
+  version: 1.0.0
+  description: |
+    Java Spring Boot 主业务后端 API。
+    前端只调用本 API。
+    Python AI 服务和 Render Worker 通过 callback 接口回调本 API。
+    V1 契约版本为 1.0.0。AI 回调、RenderManifest 和数据库记录必须保存对应版本号。
+
+servers:
+  - url: https://api.example.com
+    description: Production
+  - url: http://localhost:8080
+    description: Local
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+  - name: Products
+  - name: VideoTasks
+  - name: Storyboards
+  - name: Videos
+  - name: Storage
+  - name: Quotas
+  - name: Callbacks
+  - name: Admin
+
+paths:
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "200":
+          description: Register success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+
+  /api/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        "200":
+          description: Refresh success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+
+  /api/products:
+    post:
+      tags: [Products]
+      summary: Create product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductRequest"
+      responses:
+        "200":
+          description: Product created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateProductResponse"
+
+    get:
+      tags: [Products]
+      summary: List current user's products
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Product list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductListResponse"
+
+  /api/products/{productId}:
+    get:
+      tags: [Products]
+      summary: Get product detail
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      responses:
+        "200":
+          description: Product detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductDetailResponse"
+
+    patch:
+      tags: [Products]
+      summary: Update product
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductRequest"
+      responses:
+        "200":
+          description: Product updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductDetailResponse"
+
+  /api/video-tasks:
+    post:
+      tags: [VideoTasks]
+      summary: Create video generation task
+      description: |
+        创建视频任务时预扣 1 次成片额度。
+        Java 创建 task 后调用 Python AI Orchestrator 启动第一阶段工作流。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVideoTaskRequest"
+      responses:
+        "200":
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateVideoTaskResponse"
+
+    get:
+      tags: [VideoTasks]
+      summary: List current user's video tasks
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/VideoTaskStatus"
+        - name: productId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Task list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoTaskListResponse"
+
+  /api/video-tasks/{taskId}:
+    get:
+      tags: [VideoTasks]
+      summary: Get task status and detail
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Task detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoTaskDetailResponse"
+
+  /api/video-tasks/{taskId}/plans:
+    get:
+      tags: [VideoTasks]
+      summary: Get generated video plans
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Video plans
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoPlanListResponse"
+
+  /api/video-tasks/{taskId}/select-plan:
+    post:
+      tags: [VideoTasks]
+      summary: Select a video plan
+      description: |
+        用户选择一个视频方案后，Java 保存 selectedPlanId，
+        然后调用 Python AI 服务启动第二阶段脚本、分镜、素材生成工作流。
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [planId]
+              properties:
+                planId:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: Plan selected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoTaskStatusResponse"
+
+  /api/video-tasks/{taskId}/retry:
+    post:
+      tags: [VideoTasks]
+      summary: Retry failed task
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Retry accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoTaskStatusResponse"
+
+  /api/video-tasks/{taskId}/storyboard:
+    get:
+      tags: [Storyboards]
+      summary: Get storyboard by task
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Storyboard detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoryboardResponse"
+
+  /api/storyboards/{storyboardId}:
+    patch:
+      tags: [Storyboards]
+      summary: Update storyboard text fields
+      parameters:
+        - name: storyboardId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStoryboardRequest"
+      responses:
+        "200":
+          description: Storyboard updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoryboardResponse"
+
+  /api/videos:
+    get:
+      tags: [Videos]
+      summary: List current user's videos
+      parameters:
+        - name: productId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/VideoStatus"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Video list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoListResponse"
+
+  /api/videos/{videoId}:
+    get:
+      tags: [Videos]
+      summary: Get video detail
+      parameters:
+        - $ref: "#/components/parameters/VideoId"
+      responses:
+        "200":
+          description: Video detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoDetailResponse"
+
+  /api/videos/{videoId}/export:
+    post:
+      tags: [Videos]
+      summary: Mark video as exported and return download URL
+      parameters:
+        - $ref: "#/components/parameters/VideoId"
+      responses:
+        "200":
+          description: Export success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoExportResponse"
+
+  /api/storage/presigned-upload-url:
+    post:
+      tags: [Storage]
+      summary: Get COS presigned upload URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PresignedUploadRequest"
+      responses:
+        "200":
+          description: Upload URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PresignedUploadResponse"
+
+  /api/quotas/me:
+    get:
+      tags: [Quotas]
+      summary: Get current user's quota
+      responses:
+        "200":
+          description: Quota detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserQuotaResponse"
+
+  /api/ai-callbacks/{taskId}:
+    post:
+      tags: [Callbacks]
+      summary: Python AI callback
+      security:
+        - internalServiceToken: []
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiCallbackRequest"
+      responses:
+        "200":
+          description: Callback accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallbackResponse"
+
+  /api/render-callbacks/{taskId}:
+    post:
+      tags: [Callbacks]
+      summary: Render Worker callback
+      security:
+        - internalServiceToken: []
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenderCallbackRequest"
+      responses:
+        "200":
+          description: Callback accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallbackResponse"
+
+  /api/admin/video-tasks:
+    get:
+      tags: [Admin]
+      summary: Admin list all video tasks
+      responses:
+        "200":
+          description: Admin task list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoTaskListResponse"
+
+  /api/admin/model-logs:
+    get:
+      tags: [Admin]
+      summary: Admin list model logs
+      responses:
+        "200":
+          description: Model logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelLogListResponse"
+
+  /api/admin/render-logs:
+    get:
+      tags: [Admin]
+      summary: Admin list render logs
+      responses:
+        "200":
+          description: Render logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenderLogListResponse"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+    internalServiceToken:
+      type: apiKey
+      in: header
+      name: X-Internal-Service-Token
+
+  parameters:
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    VideoId:
+      name: videoId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        message:
+          type: string
+          example: success
+        data:
+          nullable: true
+
+    ErrorDetail:
+      type: object
+      required: [errorCode, errorMessage, failedStage, retryable]
+      properties:
+        errorCode:
+          type: string
+        errorMessage:
+          type: string
+        failedStage:
+          type: string
+        retryable:
+          type: boolean
+        provider:
+          type: string
+          nullable: true
+        rawError:
+          type: object
+          nullable: true
+          description: Internal diagnostics for admin views only.
+
+    PageMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+
+    VideoType:
+      type: string
+      enum:
+        - pain_point_solution
+        - before_after
+        - review
+        - product_showcase
+        - ugc_style
+        - tutorial
+
+    VideoTaskStatus:
+      type: string
+      enum:
+        - draft
+        - analyzing
+        - analysis_completed
+        - plan_generated
+        - waiting_plan_selection
+        - script_generating
+        - script_generated
+        - material_generating
+        - material_generated
+        - rendering
+        - checking
+        - completed
+        - failed
+        - exported
+
+    VideoStatus:
+      type: string
+      enum:
+        - completed
+        - exported
+        - deleted
+
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    AuthResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        message:
+          type: string
+          example: success
+        data:
+          type: object
+          properties:
+            userId:
+              type: string
+              format: uuid
+            accessToken:
+              type: string
+            refreshToken:
+              type: string
+
+    CreateProductRequest:
+      type: object
+      required: [name, imageUrls, targetMarket, language]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        productLink:
+          type: string
+        imageUrls:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uri
+        targetMarket:
+          type: string
+          example: US
+        language:
+          type: string
+          example: en
+
+    UpdateProductRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        sellingPoints:
+          type: array
+          items:
+            type: string
+        painPoints:
+          type: array
+          items:
+            type: string
+        targetAudience:
+          type: array
+          items:
+            type: string
+        scenes:
+          type: array
+          items:
+            type: string
+
+    CreateProductResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            productId:
+              type: string
+              format: uuid
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        productLink:
+          type: string
+        category:
+          type: string
+        targetMarket:
+          type: string
+        language:
+          type: string
+        sellingPoints:
+          type: array
+          items:
+            type: string
+        painPoints:
+          type: array
+          items:
+            type: string
+        targetAudience:
+          type: array
+          items:
+            type: string
+        scenes:
+          type: array
+          items:
+            type: string
+        videoScore:
+          type: integer
+        riskTips:
+          type: array
+          items:
+            type: string
+        imageUrls:
+          type: array
+          items:
+            type: string
+
+    ProductDetailResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          $ref: "#/components/schemas/Product"
+
+    ProductListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Product"
+            page:
+              type: integer
+            pageSize:
+              type: integer
+            total:
+              type: integer
+            totalPages:
+              type: integer
+
+    CreateVideoTaskRequest:
+      type: object
+      required: [productId, duration, videoType]
+      properties:
+        productId:
+          type: string
+          format: uuid
+        duration:
+          type: integer
+          enum: [15, 20, 25, 30]
+        videoType:
+          $ref: "#/components/schemas/VideoType"
+        needSubtitles:
+          type: boolean
+          default: true
+        needVoiceover:
+          type: boolean
+          default: false
+
+    CreateVideoTaskResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            taskId:
+              type: string
+              format: uuid
+            status:
+              $ref: "#/components/schemas/VideoTaskStatus"
+            progress:
+              type: integer
+
+    VideoTask:
+      type: object
+      properties:
+        taskId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/VideoTaskStatus"
+        progress:
+          type: integer
+        duration:
+          type: integer
+        videoType:
+          $ref: "#/components/schemas/VideoType"
+        needSubtitles:
+          type: boolean
+        needVoiceover:
+          type: boolean
+        selectedPlanId:
+          type: string
+          format: uuid
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+        errorCode:
+          type: string
+          nullable: true
+        failedStage:
+          type: string
+          nullable: true
+        errorRetryable:
+          type: boolean
+          nullable: true
+        manifestVersion:
+          type: string
+          example: 1.0.0
+        schemaVersion:
+          type: string
+          example: 1.0.0
+        retryCount:
+          type: integer
+
+    VideoTaskDetailResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          $ref: "#/components/schemas/VideoTask"
+
+    VideoTaskStatusResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            taskId:
+              type: string
+              format: uuid
+            status:
+              $ref: "#/components/schemas/VideoTaskStatus"
+            progress:
+              type: integer
+
+    VideoTaskListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/VideoTask"
+            page:
+              type: integer
+            pageSize:
+              type: integer
+            total:
+              type: integer
+            totalPages:
+              type: integer
+
+    VideoPlan:
+      type: object
+      properties:
+        planId:
+          type: string
+          format: uuid
+        type:
+          $ref: "#/components/schemas/VideoType"
+        title:
+          type: string
+        hook:
+          type: string
+        structure:
+          type: string
+        reason:
+          type: string
+        estimatedDuration:
+          type: integer
+        score:
+          type: integer
+
+    VideoPlanListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            taskId:
+              type: string
+              format: uuid
+            plans:
+              type: array
+              items:
+                $ref: "#/components/schemas/VideoPlan"
+
+    StoryboardShot:
+      type: object
+      properties:
+        shotNo:
+          type: integer
+        duration:
+          type: integer
+        scene:
+          type: string
+        action:
+          type: string
+        subtitle:
+          type: string
+        materialType:
+          type: string
+        prompt:
+          type: string
+        editInstruction:
+          type: string
+
+    Storyboard:
+      type: object
+      properties:
+        storyboardId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        hook:
+          type: string
+        script:
+          type: string
+        coverText:
+          type: string
+        caption:
+          type: string
+        hashtags:
+          type: array
+          items:
+            type: string
+        musicSuggestion:
+          type: string
+        shots:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoryboardShot"
+
+    StoryboardResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          $ref: "#/components/schemas/Storyboard"
+
+    UpdateStoryboardRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        hook:
+          type: string
+        coverText:
+          type: string
+        caption:
+          type: string
+        hashtags:
+          type: array
+          items:
+            type: string
+        shots:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoryboardShot"
+
+    Video:
+      type: object
+      properties:
+        videoId:
+          type: string
+          format: uuid
+        taskId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        videoUrl:
+          type: string
+        coverUrl:
+          type: string
+        duration:
+          type: integer
+        resolution:
+          type: string
+        qualityScore:
+          type: integer
+        riskScore:
+          type: integer
+        caption:
+          type: string
+        hashtags:
+          type: array
+          items:
+            type: string
+        status:
+          $ref: "#/components/schemas/VideoStatus"
+
+    VideoDetailResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          $ref: "#/components/schemas/Video"
+
+    VideoListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Video"
+            page:
+              type: integer
+            pageSize:
+              type: integer
+            total:
+              type: integer
+            totalPages:
+              type: integer
+
+    VideoExportResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            videoId:
+              type: string
+              format: uuid
+            status:
+              $ref: "#/components/schemas/VideoStatus"
+            downloadUrl:
+              type: string
+
+    PresignedUploadRequest:
+      type: object
+      required: [fileName, mimeType, folder, sizeBytes]
+      properties:
+        fileName:
+          type: string
+        mimeType:
+          type: string
+        sizeBytes:
+          type: integer
+          minimum: 1
+        contentMd5:
+          type: string
+          nullable: true
+        folder:
+          type: string
+          enum: [product-images, ai-images, ai-clips, final-videos, covers]
+        productId:
+          type: string
+          format: uuid
+          nullable: true
+        taskId:
+          type: string
+          format: uuid
+          nullable: true
+
+    PresignedUploadResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            uploadUrl:
+              type: string
+            fileUrl:
+              type: string
+
+    UserQuotaResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            videoQuota:
+              type: integer
+            imageQuota:
+              type: integer
+            videoClipQuota:
+              type: integer
+            exportQuota:
+              type: integer
+            usedVideoCount:
+              type: integer
+            usedImageCount:
+              type: integer
+            usedVideoClipCount:
+              type: integer
+            usedExportCount:
+              type: integer
+
+    AiCallbackRequest:
+      type: object
+      required: [taskId, schemaVersion, stage, status]
+      properties:
+        taskId:
+          type: string
+          format: uuid
+        schemaVersion:
+          type: string
+          example: 1.0.0
+        stage:
+          type: string
+          enum:
+            - product_analysis
+            - video_plan
+            - storyboard
+            - material
+            - quality_check
+            - render_manifest
+        status:
+          type: string
+          enum: [success, failed]
+        nextTaskStatus:
+          $ref: "#/components/schemas/VideoTaskStatus"
+        productAnalysis:
+          type: object
+          nullable: true
+        plans:
+          type: array
+          nullable: true
+          items:
+            type: object
+        storyboard:
+          type: object
+          nullable: true
+        materials:
+          type: array
+          nullable: true
+          items:
+            type: object
+        renderManifest:
+          type: object
+          nullable: true
+        qualityCheck:
+          type: object
+          nullable: true
+        error:
+          allOf:
+            - $ref: "#/components/schemas/ErrorDetail"
+          nullable: true
+
+    RenderCallbackRequest:
+      type: object
+      required: [taskId, status]
+      properties:
+        taskId:
+          type: string
+          format: uuid
+        videoId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Required when status is completed.
+        renderTaskId:
+          type: string
+          nullable: true
+        manifestVersion:
+          type: string
+          example: 1.0.0
+        status:
+          type: string
+          enum: [completed, failed]
+        videoUrl:
+          type: string
+          nullable: true
+        coverUrl:
+          type: string
+          nullable: true
+        duration:
+          type: integer
+          nullable: true
+        resolution:
+          type: string
+          nullable: true
+        renderLog:
+          type: object
+          nullable: true
+        error:
+          allOf:
+            - $ref: "#/components/schemas/ErrorDetail"
+          nullable: true
+
+    CallbackResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        message:
+          type: string
+          example: received
+        data:
+          type: object
+          properties:
+            received:
+              type: boolean
+
+    ModelLogListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+            total:
+              type: integer
+
+    RenderLogListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+            total:
+              type: integer
