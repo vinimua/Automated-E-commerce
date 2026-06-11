@@ -1,0 +1,103 @@
+services:
+  # ============================================================
+  # PostgreSQL — 主数据库 (端口映射 15432)
+  # ============================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: tk-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tk_ai_video}
+      POSTGRES_USER: ${POSTGRES_USER:-tk_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tk_dev_password}
+    ports:
+      - "15432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tk_user} -d ${POSTGRES_DB:-tk_ai_video}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ============================================================
+  # Redis — 缓存 / 临时状态 (端口映射 16380, 避开已有的 6379)
+  # ============================================================
+  redis:
+    image: redis:7-alpine
+    container_name: tk-redis
+    restart: unless-stopped
+    ports:
+      - "16380:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --save 900 1 --save 300 10 --save 60 10000 --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================
+  # RabbitMQ — 渲染任务队列 (AMQP 15673, UI 25673)
+  # ============================================================
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: tk-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "15673:5672"    # AMQP
+      - "25673:15672"   # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-tk_user}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-tk_dev_password}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ============================================================
+  # Temporal Server — AI 工作流编排 (gRPC 17233)
+  # ============================================================
+  temporal:
+    image: temporalio/auto-setup:1.24.2
+    container_name: tk-temporal
+    restart: unless-stopped
+    ports:
+      - "17233:7233"    # gRPC
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      DBNAME: temporal
+      POSTGRES_USER: ${POSTGRES_USER:-tk_user}
+      POSTGRES_PWD: ${POSTGRES_PASSWORD:-tk_dev_password}
+      POSTGRES_SEEDS: postgres
+      SKIP_DB_CREATE: false
+      SKIP_DB_CREATE: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ============================================================
+  # Temporal UI — 工作流可视化 (端口映射 18088)
+  # ============================================================
+  temporal-ui:
+    image: temporalio/ui:2.28.0
+    container_name: tk-temporal-ui
+    restart: unless-stopped
+    ports:
+      - "18088:8080"
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+    depends_on:
+      - temporal
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:

@@ -1,0 +1,11 @@
+# Temporal development dynamic config
+system.minRetryIntervalInMs:
+  - value: 100
+system.enableEagerActivityDispatch:
+  - value: true
+frontend.enableClientVersionCheck:
+  - value: false
+history.maxAutoResetPoints:
+  - value: 3
+limit.maxIDLength:
+  - value: 255
