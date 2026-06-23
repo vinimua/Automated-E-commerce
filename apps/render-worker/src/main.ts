@@ -6,19 +6,21 @@
  */
 
 import dotenv from "dotenv";
+import path from "path";
+
 dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), "../../.env") });
 
 import { consumeRenderQueue } from "./consumer/render-consumer";
-
-const RABBITMQ_URL =
-  process.env.RABBITMQ_URL || "amqp://tk_user:tk_dev_password@localhost:5672";
+import { config } from "./config";
 
 async function main() {
   console.log("[render-worker] Starting Render Worker...");
-  console.log(`[render-worker] RabbitMQ: ${RABBITMQ_URL}`);
+  console.log(`[render-worker] RabbitMQ: ${config.rabbitmqUrl}`);
+  console.log(`[render-worker] Temp dir: ${config.tempDir}`);
 
   try {
-    await consumeRenderQueue(RABBITMQ_URL);
+    await consumeRenderQueue(config.rabbitmqUrl);
   } catch (error) {
     console.error("[render-worker] Fatal error:", error);
     process.exit(1);

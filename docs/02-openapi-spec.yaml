@@ -582,9 +582,6 @@ components:
         - pain_point_solution
         - before_after
         - review
-        - product_showcase
-        - ugc_style
-        - tutorial
 
     VideoTaskStatus:
       type: string

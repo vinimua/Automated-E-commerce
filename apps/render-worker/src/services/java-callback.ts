@@ -5,6 +5,7 @@
 
 export interface CallbackPayload {
   taskId: string;
+  videoId?: string;
   renderTaskId: string;
   correlationId: string;
   status: "completed" | "failed";

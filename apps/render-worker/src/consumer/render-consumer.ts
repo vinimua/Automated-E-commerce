@@ -1,17 +1,22 @@
 /**
  * RabbitMQ Consumer: video.render.queue
  *
- * 消费渲染任务，执行 11 步校验 → Remotion 渲染 → FFmpeg → COS 上传 → Java 回调
+ * Pipeline:
+ *   parse → validate manifest → download assets → render → upload to COS → callback Java
  */
-
 import amqp from "amqplib";
+import fs from "fs";
+import path from "path";
+import { config } from "../config";
 import { validateRenderManifest } from "../services/manifest-validator";
+import { downloadAssets } from "../services/asset-downloader";
 import { renderVideo } from "../services/renderer";
 import { uploadToCOS } from "../services/cos-uploader";
 import { callbackJava, CallbackPayload } from "../services/java-callback";
 
-const QUEUE = "video.render.queue";
-const PREFETCH = 1; // Process one task at a time
+const QUEUE = config.renderQueue;
+const PREFETCH = 1; // One task at a time (render is CPU/memory intensive)
+const RETRY_HEADER = "x-render-retry-count";
 
 export interface RenderMessage {
   taskId: string;
@@ -43,12 +48,17 @@ export async function consumeRenderQueue(rabbitmqUrl: string) {
     }
 
     const { taskId, renderTaskId, correlationId, renderManifest, callbackUrl } = message;
-    console.log(`[render-consumer] Processing: taskId=${taskId} renderTaskId=${renderTaskId}`);
+    const tempDir = path.join(config.tempDir, taskId, renderTaskId);
+
+    console.log(
+      `[render-consumer] Processing: taskId=${taskId} renderTaskId=${renderTaskId} template=${renderManifest.template}`
+    );
 
     try {
-      // Step 1-6: Validate manifest through 11-step pipeline
+      // ── Step 1: Validate manifest ──
       const validation = await validateRenderManifest(renderManifest);
       if (!validation.valid) {
+        console.error(`[render-consumer] Manifest validation failed: ${validation.error}`);
         await callbackJava(callbackUrl, {
           taskId,
           renderTaskId,
@@ -64,16 +74,40 @@ export async function consumeRenderQueue(rabbitmqUrl: string) {
         channel.ack(msg);
         return;
       }
+      console.log("[render-consumer] Manifest validated OK");
 
-      // Step 7-12: Render
-      const renderResult = await renderVideo(renderManifest);
+      // ── Step 2: Download assets ──
+      const assets = (renderManifest.assets || []) as Array<{
+        shotNo: number;
+        type: string;
+        url?: string;
+        textContent?: string;
+      }>;
+      const downloadedAssets = await downloadAssets(assets, taskId, renderTaskId);
+      console.log(
+        `[render-consumer] Assets downloaded: ${downloadedAssets.length} items`
+      );
 
-      // Step 13-15: Upload
-      const uploadResult = await uploadToCOS(renderResult);
+      // ── Step 3: Render video ──
+      const renderResult = await renderVideo(
+        renderManifest,
+        taskId,
+        renderTaskId,
+        downloadedAssets
+      );
 
-      // Step 16: Callback Java
+      // ── Step 4: Upload to COS ──
+      const uploadResult = await uploadToCOS(
+        renderResult.outputPath,
+        renderResult.coverPath,
+        taskId,
+        renderTaskId
+      );
+
+      // ── Step 5: Callback Java — success ──
       const callbackPayload: CallbackPayload = {
         taskId,
+        videoId: String(renderManifest.videoId),
         renderTaskId,
         correlationId,
         status: "completed",
@@ -95,7 +129,24 @@ export async function consumeRenderQueue(rabbitmqUrl: string) {
     } catch (error: any) {
       console.error(`[render-consumer] Failed: taskId=${taskId}`, error.message);
 
-      // Notify Java of failure
+      const retryCount = Number(msg.properties.headers?.[RETRY_HEADER] || 0);
+      if (retryCount < config.maxRenderRetries) {
+        const nextRetry = retryCount + 1;
+        console.warn(
+          `[render-consumer] Requeueing taskId=${taskId}, attempt=${nextRetry}/${config.maxRenderRetries}`
+        );
+        channel.sendToQueue(QUEUE, msg.content, {
+          persistent: true,
+          contentType: msg.properties.contentType || "application/json",
+          headers: {
+            ...(msg.properties.headers || {}),
+            [RETRY_HEADER]: nextRetry,
+          },
+        });
+        channel.ack(msg);
+        return;
+      }
+
       try {
         await callbackJava(callbackUrl, {
           taskId,
@@ -106,15 +157,24 @@ export async function consumeRenderQueue(rabbitmqUrl: string) {
             errorCode: "RENDER_FAILED",
             errorMessage: error.message,
             failedStage: "rendering",
-            retryable: true,
+            retryable: false,
           },
         });
       } catch (cbError) {
-        console.error("[render-consumer] Callback failed:", cbError);
+        console.error("[render-consumer] Final failure callback failed:", cbError);
       }
 
-      // Requeue for retry
-      channel.reject(msg, true);
+      channel.ack(msg);
+    } finally {
+      // ── Cleanup: remove temp directory ──
+      try {
+        if (fs.existsSync(tempDir)) {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+          console.log(`[render-consumer] Cleaned up temp dir: ${tempDir}`);
+        }
+      } catch (cleanupErr: any) {
+        console.warn(`[render-consumer] Temp cleanup failed: ${cleanupErr.message}`);
+      }
     }
   });
 }

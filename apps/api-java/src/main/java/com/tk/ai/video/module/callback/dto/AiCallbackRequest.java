@@ -1,5 +1,8 @@
 package com.tk.ai.video.module.callback.dto;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 import java.util.List;
 import java.util.Map;
@@ -7,9 +10,16 @@ import java.util.UUID;
 
 @Data
 public class AiCallbackRequest {
+    @NotNull
     private UUID taskId;
+    @NotBlank
+    @Pattern(regexp = "1\\.0\\.0")
     private String schemaVersion;
+    @NotBlank
+    @Pattern(regexp = "product_analysis|video_plan|storyboard|material|quality_check|render_manifest")
     private String stage;
+    @NotBlank
+    @Pattern(regexp = "success|failed")
     private String status;
     private String nextTaskStatus;
     private Map<String, Object> productAnalysis;

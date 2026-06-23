@@ -4,6 +4,7 @@ import com.tk.ai.video.common.ApiResponse;
 import com.tk.ai.video.module.callback.dto.*;
 import com.tk.ai.video.module.callback.service.AiCallbackService;
 import com.tk.ai.video.module.callback.service.RenderCallbackService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,7 +20,7 @@ public class CallbackController {
     @PostMapping("/api/ai-callbacks/{taskId}")
     public ApiResponse<CallbackResponse> aiCallback(
             @PathVariable UUID taskId,
-            @RequestBody AiCallbackRequest request
+            @Valid @RequestBody AiCallbackRequest request
     ) {
         request.setTaskId(taskId);
         aiCallbackService.handleCallback(request);
@@ -31,7 +32,7 @@ public class CallbackController {
     @PostMapping("/api/render-callbacks/{taskId}")
     public ApiResponse<CallbackResponse> renderCallback(
             @PathVariable UUID taskId,
-            @RequestBody RenderCallbackRequest request
+            @Valid @RequestBody RenderCallbackRequest request
     ) {
         request.setTaskId(taskId);
         renderCallbackService.handleCallback(request);

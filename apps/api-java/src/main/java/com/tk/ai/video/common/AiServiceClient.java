@@ -1,32 +1,50 @@
 package com.tk.ai.video.common;
 
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.client.ClientHttpRequestInterceptor;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import java.net.http.HttpClient;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 /**
  * HTTP client to Python AI Orchestrator.
- * Fire-and-forget dispatch: starts workflows, task progresses via callbacks.
+ * RestClient is built in the constructor via constructor injection,
+ * ensuring @Value fields are populated before the interceptor captures them.
  */
 @Slf4j
 @Service
 public class AiServiceClient {
 
     private final RestClient restClient;
+    private final String baseUrl;
+    private final String internalToken;
 
-    @Value("${ai-orchestrator.base-url}")
-    private String baseUrl;
+    /**
+     * All @Value dependencies are injected via constructor parameters.
+     * This guarantees they are available when RestClient is built.
+     */
+    public AiServiceClient(
+            @Value("${ai-orchestrator.base-url}") String baseUrl,
+            @Value("${internal-service.token}") String internalToken
+    ) {
+        this.baseUrl = baseUrl;
+        this.internalToken = internalToken;
 
-    @Value("${internal-service.token}")
-    private String internalToken;
+        // Force HTTP/1.1 — Java 21+ HttpClient defaults to HTTP/2 upgrade,
+        // which causes Uvicorn to drop the request body (resulting in 422).
+        HttpClient httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .build();
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
 
-    public AiServiceClient() {
         this.restClient = RestClient.builder()
+                .requestFactory(factory)
                 .requestInterceptor((request, body, execution) -> {
                     request.getHeaders().add("X-Internal-Service-Token", internalToken);
                     request.getHeaders().add("Content-Type", "application/json");
@@ -35,17 +53,13 @@ public class AiServiceClient {
                 .build();
     }
 
-    /**
-     * Start the ProductAnalysisWorkflow.
-     * Task status stays in "analyzing" until AI callback arrives.
-     */
     public void startProductAnalysis(
             UUID taskId, UUID productId, UUID userId,
             String productName, String productDescription,
-            String productLink, java.util.List<String> imageUrls,
+            String productLink, List<String> imageUrls,
             String targetMarket, String language
     ) {
-        String correlationId = org.slf4j.MDC.get("correlationId");
+        String correlationId = MDC.get("correlationId");
         if (correlationId == null) {
             correlationId = UUID.randomUUID().toString();
         }
@@ -74,19 +88,17 @@ public class AiServiceClient {
             log.info("Started ProductAnalysisWorkflow for taskId={}", taskId);
         } catch (Exception e) {
             log.warn("Failed to notify AI orchestrator for task {}: {}", taskId, e.getMessage());
+            // Fire-and-forget: task stays in "analyzing" until AI callback arrives.
+            // A scheduled cleanup job handles tasks stuck for >30min.
         }
     }
 
-    /**
-     * Start the SelectedPlanGenerationWorkflow.
-     * Task status stays in "script_generating" until AI callback arrives.
-     */
     public void startSelectedPlanGeneration(
             UUID taskId, UUID productId, UUID userId,
             UUID selectedPlanId, Map<String, Object> selectedPlan,
             int duration, String videoType, boolean needSubtitles, boolean needVoiceover
     ) {
-        String correlationId = org.slf4j.MDC.get("correlationId");
+        String correlationId = MDC.get("correlationId");
         if (correlationId == null) {
             correlationId = UUID.randomUUID().toString();
         }
@@ -113,6 +125,7 @@ public class AiServiceClient {
             log.info("Started SelectedPlanGenerationWorkflow for taskId={}", taskId);
         } catch (Exception e) {
             log.warn("Failed to notify AI orchestrator for task {}: {}", taskId, e.getMessage());
+            // Fire-and-forget: task stays in current state until AI callback arrives.
         }
     }
 }

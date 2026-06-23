@@ -39,6 +39,7 @@ public class JwtTokenProvider {
                 .issuer(jwtConfig.getIssuer())
                 .subject(userId.toString())
                 .claim("type", "refresh")
+                .id(UUID.randomUUID().toString()) // jti: ensures unique hash per token
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(jwtConfig.getSigningKey())

@@ -25,6 +25,7 @@ class SelectedPlanGenerationRequest(BaseModel):
     userId: UUID
     correlationId: str
     selectedPlanId: UUID
+    productContext: dict = Field(default_factory=dict)
     selectedPlan: dict
     duration: int = Field(ge=15, le=30)
     videoType: str

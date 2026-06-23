@@ -45,6 +45,7 @@ public class AuthServiceImpl implements AuthService {
 
         // Create user
         UserEntity user = new UserEntity();
+        user.setId(UUID.randomUUID());
         user.setEmail(request.getEmail());
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         user.setRole(Role.USER.name().toLowerCase());
@@ -53,6 +54,7 @@ public class AuthServiceImpl implements AuthService {
 
         // Create initial quota row
         UserQuotaEntity quota = new UserQuotaEntity();
+        quota.setId(UUID.randomUUID());
         quota.setUserId(user.getId());
         quota.setVideoQuota(10);  // Default: 10 video generations
         quota.setImageQuota(50);  // Default: 50 AI image generations
@@ -125,6 +127,7 @@ public class AuthServiceImpl implements AuthService {
 
         // Store refresh token hash
         RefreshTokenEntity entity = RefreshTokenEntity.builder()
+                .id(UUID.randomUUID())
                 .userId(user.getId())
                 .tokenHash(hashToken(refreshToken))
                 .expiresAt(OffsetDateTime.now().plusDays(30))

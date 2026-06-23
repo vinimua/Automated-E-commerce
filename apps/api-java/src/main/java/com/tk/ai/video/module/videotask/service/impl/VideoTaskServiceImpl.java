@@ -6,6 +6,8 @@ import com.tk.ai.video.common.*;
 import com.tk.ai.video.module.product.entity.ProductEntity;
 import com.tk.ai.video.module.product.mapper.ProductImageMapper;
 import com.tk.ai.video.module.product.mapper.ProductMapper;
+import com.tk.ai.video.module.storyboard.entity.VideoPlanEntity;
+import com.tk.ai.video.module.storyboard.mapper.VideoPlanMapper;
 import com.tk.ai.video.module.videotask.dto.*;
 import com.tk.ai.video.module.videotask.entity.VideoTaskEntity;
 import com.tk.ai.video.module.videotask.enums.VideoType;
@@ -20,7 +22,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -29,9 +34,12 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class VideoTaskServiceImpl implements VideoTaskService {
 
+    private static final Set<Integer> ALLOWED_DURATIONS = Set.of(15, 20, 25, 30);
+
     private final VideoTaskMapper videoTaskMapper;
     private final ProductMapper productMapper;
     private final ProductImageMapper productImageMapper;
+    private final VideoPlanMapper videoPlanMapper;
     private final QuotaService quotaService;
     private final AiServiceClient aiServiceClient;
 
@@ -41,6 +49,9 @@ public class VideoTaskServiceImpl implements VideoTaskService {
         // V1 videoType freeze: only 3 types allowed
         if (!VideoType.V1_ALLOWED.contains(request.getVideoType())) {
             throw new BusinessException("V1 only supports: " + String.join(", ", VideoType.V1_ALLOWED));
+        }
+        if (!ALLOWED_DURATIONS.contains(request.getDuration())) {
+            throw new BusinessException("Duration must be one of: 15, 20, 25, 30");
         }
 
         // Validate product ownership
@@ -52,10 +63,7 @@ public class VideoTaskServiceImpl implements VideoTaskService {
             throw new ResourceForbiddenException("Product does not belong to current user");
         }
 
-        // Pre-deduct 1 video quota
         UUID taskId = UUID.randomUUID();
-        String idempotencyKey = "task:" + taskId + ":video:create";
-        quotaService.consumeQuota(userId, taskId, "video", 1, idempotencyKey);
 
         // Insert task
         VideoTaskEntity task = new VideoTaskEntity();
@@ -72,6 +80,12 @@ public class VideoTaskServiceImpl implements VideoTaskService {
         task.setSchemaVersion("1.0.0");
         task.setRetryCount(0);
         videoTaskMapper.insert(task);
+
+        // Pre-deduct 1 video quota after task insert because quota_records.task_id
+        // has a foreign key to video_tasks(id). The surrounding transaction rolls
+        // back the task if quota consumption fails.
+        String idempotencyKey = "task:" + taskId + ":video:create";
+        quotaService.consumeQuota(userId, taskId, "video", 1, idempotencyKey);
 
         log.info("VideoTask created: taskId={}, videoType={}, duration={}s", taskId, request.getVideoType(), request.getDuration());
 
@@ -124,19 +138,25 @@ public class VideoTaskServiceImpl implements VideoTaskService {
         VideoTaskEntity task = findTask(taskId);
         checkOwnership(task, userId);
 
+        VideoPlanEntity plan = videoPlanMapper.findOwnedPlan(request.getPlanId(), taskId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("VideoPlan", request.getPlanId()));
+
+        if ("plan_generated".equals(task.getStatus())) {
+            VideoTaskStateMachine.validateTransition(task.getStatus(), "waiting_plan_selection");
+            task.setStatus("waiting_plan_selection");
+        }
         VideoTaskStateMachine.validateTransition(task.getStatus(), "script_generating");
 
-        task.setSelectedPlanId(request.getPlanId());
+        task.setSelectedPlanId(plan.getId());
         task.setStatus("script_generating");
         task.setProgress(30);
         task.setUpdatedAt(OffsetDateTime.now());
         videoTaskMapper.updateById(task);
 
         // Dispatch Phase 2 workflow to Python AI
-        ProductEntity product = productMapper.selectById(task.getProductId());
         aiServiceClient.startSelectedPlanGeneration(
                 taskId, task.getProductId(), userId,
-                request.getPlanId(), null,
+                plan.getId(), toSelectedPlanPayload(plan),
                 task.getDuration(), task.getVideoType(),
                 task.getNeedSubtitles() != null && task.getNeedSubtitles(),
                 task.getNeedVoiceover() != null && task.getNeedVoiceover()
@@ -177,6 +197,8 @@ public class VideoTaskServiceImpl implements VideoTaskService {
         task.setUpdatedAt(OffsetDateTime.now());
         videoTaskMapper.updateById(task);
 
+        dispatchRetry(task, userId, retryTarget);
+
         log.info("Task retry: taskId={}, retryTarget={}, retryCount={}", taskId, retryTarget, task.getRetryCount());
 
         return new VideoTaskStatusResponse(taskId, retryTarget, 0);
@@ -193,6 +215,58 @@ public class VideoTaskServiceImpl implements VideoTaskService {
     private void checkOwnership(VideoTaskEntity task, UUID userId) {
         if (!task.getUserId().equals(userId)) {
             throw new ResourceForbiddenException("Task does not belong to current user");
+        }
+    }
+
+    private Map<String, Object> toSelectedPlanPayload(VideoPlanEntity plan) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("planId", plan.getId().toString());
+        payload.put("type", plan.getType());
+        payload.put("title", plan.getTitle());
+        payload.put("hook", plan.getHook());
+        payload.put("structure", plan.getStructure());
+        payload.put("reason", plan.getReason());
+        payload.put("estimatedDuration", plan.getEstimatedDuration());
+        payload.put("score", plan.getScore());
+        return payload;
+    }
+
+    private void dispatchRetry(VideoTaskEntity task, UUID userId, String retryTarget) {
+        ProductEntity product = productMapper.selectById(task.getProductId());
+        if (product == null) {
+            throw new ResourceNotFoundException("Product", task.getProductId());
+        }
+
+        if ("analyzing".equals(retryTarget)) {
+            List<String> imageUrls = productImageMapper.findByProductId(product.getId()).stream()
+                    .map(img -> img.getUrl())
+                    .collect(Collectors.toList());
+            aiServiceClient.startProductAnalysis(
+                    task.getId(), product.getId(), userId,
+                    product.getName(), product.getDescription(), product.getProductLink(),
+                    imageUrls, product.getTargetMarket(), product.getLanguage()
+            );
+            return;
+        }
+
+        if ("script_generating".equals(retryTarget) || "material_generating".equals(retryTarget) || "rendering".equals(retryTarget)) {
+            if (task.getSelectedPlanId() == null) {
+                throw new BusinessException("Task has no selected plan to retry");
+            }
+            VideoPlanEntity plan = videoPlanMapper.findOwnedPlan(task.getSelectedPlanId(), task.getId(), userId)
+                    .orElseThrow(() -> new ResourceNotFoundException("VideoPlan", task.getSelectedPlanId()));
+            aiServiceClient.startSelectedPlanGeneration(
+                    task.getId(), task.getProductId(), userId,
+                    plan.getId(), toSelectedPlanPayload(plan),
+                    task.getDuration(), task.getVideoType(),
+                    task.getNeedSubtitles() != null && task.getNeedSubtitles(),
+                    task.getNeedVoiceover() != null && task.getNeedVoiceover()
+            );
+            return;
+        }
+
+        if ("checking".equals(retryTarget)) {
+            log.warn("Retry target checking has no local dispatcher yet: taskId={}", task.getId());
         }
     }
 

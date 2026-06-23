@@ -63,8 +63,10 @@ public class StoryboardServiceImpl implements StoryboardService {
 
         // Update shots if provided
         if (request.getShots() != null) {
+            storyboardShotMapper.deleteByStoryboardId(storyboardId);
             for (StoryboardShotDto shotDto : request.getShots()) {
                 StoryboardShotEntity shot = new StoryboardShotEntity();
+                shot.setId(UUID.randomUUID());
                 shot.setStoryboardId(storyboardId);
                 shot.setTaskId(storyboard.getTaskId());
                 shot.setUserId(userId);
@@ -83,6 +85,7 @@ public class StoryboardServiceImpl implements StoryboardService {
         return toStoryboardResponse(storyboard);
     }
 
+    //把 VideoPlanEntity（数据库记录）转成 VideoPlanResponse（返回给前端的 DTO）。
     private VideoPlanResponse toPlanResponse(VideoPlanEntity plan) {
         VideoPlanResponse rsp = new VideoPlanResponse();
         rsp.setPlanId(plan.getId());
@@ -95,7 +98,7 @@ public class StoryboardServiceImpl implements StoryboardService {
         rsp.setScore(plan.getScore());
         return rsp;
     }
-
+//把 StoryboardEntity + 关联的镜头列表 StoryboardShotEntity 一起转成 StoryboardResponse。
     private StoryboardResponse toStoryboardResponse(StoryboardEntity storyboard) {
         List<StoryboardShotEntity> shots = storyboardShotMapper.findByStoryboardId(storyboard.getId());
 

@@ -12,7 +12,7 @@ import java.util.UUID;
 @TableName("product_images")
 public class ProductImageEntity {
 
-    @TableId(type = IdType.ASSIGN_UUID)
+    @TableId(type = IdType.INPUT)
     private UUID id;
 
     private UUID productId;

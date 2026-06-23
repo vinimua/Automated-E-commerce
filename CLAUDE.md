@@ -75,3 +75,19 @@ Only 3 videoTypes in V1 UI:
 - AI callbacks carry `schemaVersion + stage + status`
 - RenderManifest uses `manifestVersion: "1.0.0"`
 - Error payloads use `{errorCode, errorMessage, failedStage, retryable}`
+
+## Frontend Type Generation (CRITICAL)
+
+**NEVER hand-write TypeScript types that mirror API responses.** All frontend types MUST come from the OpenAPI spec. When backend fields change:
+
+1. Update `docs/02-openapi-spec.yaml` first
+2. Run `npm run generate:api-types` (in `apps/web/`)
+3. Fix TypeScript compilation errors — they tell you exactly which pages broke
+
+**Files you NEVER edit by hand when backend fields change:**
+- `apps/web/src/types/api.generated.ts` — ALWAYS regenerated from OpenAPI
+- `apps/web/src/types/api.ts` — ONLY re-exports generated types; no hand-written data structures allowed
+
+**If you're an AI agent:** When the user asks to add/change/remove backend API fields,
+you MUST update `02-openapi-spec.yaml` first, then regenerate `api.generated.ts` via
+`openapi-typescript`, then fix downstream TypeScript errors. Never skip the OpenAPI step.

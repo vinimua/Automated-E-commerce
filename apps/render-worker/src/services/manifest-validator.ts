@@ -1,25 +1,42 @@
 /**
- * RenderManifest 11-Step Validation Pipeline
+ * RenderManifest validation for the V1 renderer contract.
  *
- * 按 docs/04-render-manifest-schema.md 逐项校验：
- * 1. JSON Schema 校验
- * 2. template 存在
- * 3. assets 数量 ≥ 4
- * 4. 非 text 素材 URL 可访问 (placeholder)
- * 5. text 素材有 textContent (placeholder)
- * 6. duration 与 assets 总 duration 误差 ≤ 1s
- * 7. 字幕长度 ≤ 90 字符
- * 8. 音乐/配音/输出配置
- * 9. 素材下载安全校验 (SSRF 白名单)
- * 10. MIME 类型校验
- * 11. 文件大小校验
+ * This deliberately validates the contract fields used by the renderer instead
+ * of accepting a partially shaped object. Asset download security and MIME
+ * checks still happen in asset-downloader because they require network IO.
  */
 
-const V1_TEMPLATES = [
+const V1_TEMPLATES = new Set([
   "pain_point_solution_v1",
   "before_after_v1",
   "review_v1",
-];
+]);
+
+const VIDEO_TYPES = new Set([
+  "pain_point_solution",
+  "before_after",
+  "review",
+  "product_showcase",
+  "ugc_style",
+  "tutorial",
+]);
+
+const ASSET_TYPES = new Set(["image", "video", "product_image", "text"]);
+const TRANSITIONS = new Set([
+  "none",
+  "quick_cut",
+  "fade",
+  "zoom_in",
+  "slide_up",
+  "slide_left",
+  "flash",
+]);
+const ZOOMS = new Set(["none", "slow_in", "slow_out", "pulse", "fast_in"]);
+const POSITIONS = new Set(["center", "top", "bottom", "left", "right"]);
+const CROPS = new Set(["cover", "contain"]);
+const SUBTITLE_POSITIONS = new Set(["bottom_center", "middle_center", "top_center"]);
+const SUBTITLE_BACKGROUNDS = new Set(["none", "semi_transparent", "solid"]);
+const MUSIC_TYPES = new Set(["default", "uploaded", "none"]);
 
 export interface ValidationResult {
   valid: boolean;
@@ -30,104 +47,190 @@ export interface ValidationResult {
 export async function validateRenderManifest(
   manifest: Record<string, unknown>
 ): Promise<ValidationResult> {
-  // Step 1: Required fields
-  if (!manifest.manifestVersion || manifest.manifestVersion !== "1.0.0") {
-    return { valid: false, error: "manifestVersion must be '1.0.0'" };
+  if (!isRecord(manifest)) {
+    return fail("manifest must be an object");
   }
 
-  // Step 2: Validate template exists
-  const template = manifest.template as string;
-  if (!template || !V1_TEMPLATES.includes(template)) {
-    return {
-      valid: false,
-      error: `Unknown template: '${template}'. V1 supports: ${V1_TEMPLATES.join(", ")}`,
-    };
+  const required = [
+    "manifestVersion",
+    "taskId",
+    "videoId",
+    "videoType",
+    "template",
+    "resolution",
+    "fps",
+    "duration",
+    "assets",
+    "subtitleStyle",
+    "music",
+    "cover",
+    "output",
+  ];
+  for (const field of required) {
+    if (!(field in manifest)) return fail(`missing required field: ${field}`);
   }
 
-  // Step 3: Validate assets array
-  const assets = manifest.assets as Array<Record<string, unknown>> | undefined;
-  if (!assets || !Array.isArray(assets)) {
-    return { valid: false, error: "assets must be an array" };
+  if (manifest.manifestVersion !== "1.0.0") {
+    return fail("manifestVersion must be '1.0.0'");
+  }
+  if (!isUuid(manifest.taskId)) return fail("taskId must be a UUID");
+  if (!isUuid(manifest.videoId)) return fail("videoId must be a UUID");
+  if (!isEnum(manifest.videoType, VIDEO_TYPES)) return fail("unsupported videoType");
+  if (!isEnum(manifest.template, V1_TEMPLATES)) return fail("unsupported template");
+  if (manifest.resolution !== "1080x1920") return fail("resolution must be 1080x1920");
+  if (manifest.fps !== 30) return fail("fps must be 30");
+  if (!isIntegerInRange(manifest.duration, 15, 30)) {
+    return fail("duration must be an integer between 15 and 30");
   }
 
-  // Step 4: Minimum 4 assets
-  if (assets.length < 4) {
-    return {
-      valid: false,
-      error: `Insufficient assets: ${assets.length} (minimum 4 required)`,
-    };
+  const assets = manifest.assets;
+  if (!Array.isArray(assets)) return fail("assets must be an array");
+  if (assets.length < 4 || assets.length > 12) {
+    return fail(`assets length must be between 4 and 12, got ${assets.length}`);
   }
 
-  // Step 5: Validate each asset
+  let totalDuration = 0;
+  const seenShots = new Set<number>();
   for (let i = 0; i < assets.length; i++) {
     const asset = assets[i];
-    if (!asset.type) {
-      return { valid: false, error: `Asset ${i}: missing 'type'` };
+    if (!isRecord(asset)) return fail(`assets[${i}] must be an object`);
+
+    if (!isIntegerMin(asset.shotNo, 1)) return fail(`assets[${i}].shotNo must be >= 1`);
+    if (seenShots.has(asset.shotNo)) return fail(`duplicate shotNo: ${asset.shotNo}`);
+    seenShots.add(asset.shotNo);
+
+    if (!isEnum(asset.type, ASSET_TYPES)) return fail(`assets[${i}].type is invalid`);
+    if (!isIntegerInRange(asset.duration, 1, 8)) {
+      return fail(`assets[${i}].duration must be between 1 and 8`);
     }
-    if (asset.type !== "text" && !asset.url) {
-      return { valid: false, error: `Asset ${i} (${asset.type}): missing 'url'` };
+    totalDuration += asset.duration;
+
+    if (!isStringInRange(asset.subtitle, 1, 90)) {
+      return fail(`assets[${i}].subtitle must be 1-90 characters`);
     }
-    if (asset.type === "text" && !asset.textContent) {
-      return { valid: false, error: `Asset ${i} (text): missing 'textContent'` };
-    }
-    // Validate subtitle length
-    if (asset.subtitle && typeof asset.subtitle === "string") {
-      if (asset.subtitle.length > 90) {
-        return {
-          valid: false,
-          error: `Asset ${i}: subtitle exceeds 90 characters (${asset.subtitle.length})`,
-        };
+
+    if (asset.type === "text") {
+      if (!isStringInRange(asset.textContent, 1, 120)) {
+        return fail(`assets[${i}].textContent must be 1-120 characters`);
       }
+    } else if (!isHttpUri(asset.url)) {
+      return fail(`assets[${i}].url must be an absolute http(s) URI`);
+    }
+
+    const edit = asset.edit;
+    if (!isRecord(edit)) return fail(`assets[${i}].edit must be an object`);
+    if (!isEnum(edit.transition, TRANSITIONS)) return fail(`assets[${i}].edit.transition is invalid`);
+    if (!isEnum(edit.zoom, ZOOMS)) return fail(`assets[${i}].edit.zoom is invalid`);
+    if (!isEnum(edit.position, POSITIONS)) return fail(`assets[${i}].edit.position is invalid`);
+    if ("crop" in edit && !isEnum(edit.crop, CROPS)) {
+      return fail(`assets[${i}].edit.crop is invalid`);
     }
   }
 
-  // Step 6: Duration consistency check
-  const manifestDuration = manifest.duration as number;
-  if (typeof manifestDuration !== "number" || manifestDuration <= 0) {
-    return { valid: false, error: "duration must be a positive number" };
+  if (Math.abs((manifest.duration as number) - totalDuration) > 1) {
+    return fail(
+      `Duration mismatch: manifest=${manifest.duration}s, assets total=${totalDuration}s (max +/-1s)`
+    );
   }
 
-  const assetsTotalDuration = assets.reduce(
-    (sum, a) => sum + (typeof a.duration === "number" ? a.duration : 0),
-    0
-  );
-
-  if (Math.abs(manifestDuration - assetsTotalDuration) > 1) {
-    return {
-      valid: false,
-      error: `Duration mismatch: manifest=${manifestDuration}s, assets total=${assetsTotalDuration}s (max ±1s)`,
-    };
+  const subtitleStyle = manifest.subtitleStyle;
+  if (!isRecord(subtitleStyle)) return fail("subtitleStyle must be an object");
+  if (!isIntegerInRange(subtitleStyle.fontSize, 36, 72)) {
+    return fail("subtitleStyle.fontSize must be between 36 and 72");
+  }
+  if (!isEnum(subtitleStyle.position, SUBTITLE_POSITIONS)) {
+    return fail("subtitleStyle.position is invalid");
+  }
+  if (!isIntegerInRange(subtitleStyle.maxLines, 1, 2)) {
+    return fail("subtitleStyle.maxLines must be 1 or 2");
+  }
+  if (!isEnum(subtitleStyle.background, SUBTITLE_BACKGROUNDS)) {
+    return fail("subtitleStyle.background is invalid");
+  }
+  if (
+    "safeAreaBottom" in subtitleStyle &&
+    !isIntegerInRange(subtitleStyle.safeAreaBottom, 0, 300)
+  ) {
+    return fail("subtitleStyle.safeAreaBottom must be between 0 and 300");
   }
 
-  // Step 7-8: Output config validation
-  const output = manifest.output as Record<string, unknown> | undefined;
-  if (output) {
-    if (output.resolution && output.resolution !== "1080x1920") {
-      return { valid: false, error: "V1 only supports 1080x1920 resolution" };
+  const music = manifest.music;
+  if (!isRecord(music)) return fail("music must be an object");
+  if (!isEnum(music.type, MUSIC_TYPES)) return fail("music.type is invalid");
+  if (!isNumberInRange(music.volume, 0, 1)) return fail("music.volume must be between 0 and 1");
+  if (music.url != null && !isHttpUri(music.url)) return fail("music.url must be an absolute URI");
+
+  if ("voiceover" in manifest) {
+    const voiceover = manifest.voiceover;
+    if (!isRecord(voiceover)) return fail("voiceover must be an object");
+    if (typeof voiceover.enabled !== "boolean") return fail("voiceover.enabled must be boolean");
+    if (voiceover.url != null && !isHttpUri(voiceover.url)) {
+      return fail("voiceover.url must be an absolute URI");
     }
-    if (output.fps && output.fps !== 30) {
-      return { valid: false, error: "V1 only supports 30fps" };
+    if (!isNumberInRange(voiceover.volume, 0, 1)) {
+      return fail("voiceover.volume must be between 0 and 1");
     }
   }
 
-  // All checks passed
+  const cover = manifest.cover;
+  if (!isRecord(cover)) return fail("cover must be an object");
+  if (!isStringInRange(cover.text, 1, 80)) return fail("cover.text must be 1-80 characters");
+  if (!isIntegerMin(cover.sourceShotNo, 1)) return fail("cover.sourceShotNo must be >= 1");
+  if (!seenShots.has(cover.sourceShotNo)) {
+    return fail(`cover.sourceShotNo ${cover.sourceShotNo} does not match any asset shotNo`);
+  }
+
+  const output = manifest.output;
+  if (!isRecord(output)) return fail("output must be an object");
+  if (output.format !== "mp4") return fail("output.format must be mp4");
+  if (output.codec !== "h264") return fail("output.codec must be h264");
+  if (typeof output.bitrate !== "string" || !/^[1-9][0-9]*M$/.test(output.bitrate)) {
+    return fail("output.bitrate must match /^[1-9][0-9]*M$/");
+  }
+
   return { valid: true };
 }
 
-/**
- * URL SSRF check — whitelist only COS/CDN domains.
- * TODO: Phase 5 — implement actual URL fetching with SSRF protection.
- */
-export function isUrlAllowed(url: string): boolean {
-  // 腾讯云 COS + CDN 白名单，防止 SSRF
-  const allowedDomains = [
-    "myqcloud.com",       // COS 默认域名: <bucket>.cos.<region>.myqcloud.com
-    "tencentcos.cn",      // COS 内网域名
-    "cdn.myqcloud.com",   // 腾讯云 CDN
-  ];
+function fail(error: string): ValidationResult {
+  return { valid: false, error };
+}
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isEnum(value: unknown, allowed: Set<string>): value is string {
+  return typeof value === "string" && allowed.has(value);
+}
+
+function isUuid(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  );
+}
+
+function isIntegerInRange(value: unknown, min: number, max: number): value is number {
+  return Number.isInteger(value) && (value as number) >= min && (value as number) <= max;
+}
+
+function isIntegerMin(value: unknown, min: number): value is number {
+  return Number.isInteger(value) && (value as number) >= min;
+}
+
+function isNumberInRange(value: unknown, min: number, max: number): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
+}
+
+function isStringInRange(value: unknown, min: number, max: number): value is string {
+  return typeof value === "string" && value.length >= min && value.length <= max;
+}
+
+function isHttpUri(value: unknown): value is string {
+  if (typeof value !== "string") return false;
   try {
-    const parsed = new URL(url);
-    return allowedDomains.some((domain) => parsed.hostname.endsWith(domain));
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
   } catch {
     return false;
   }

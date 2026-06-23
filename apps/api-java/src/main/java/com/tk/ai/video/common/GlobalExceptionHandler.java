@@ -67,15 +67,11 @@ public class GlobalExceptionHandler {
         return ApiResponse.error(40301, "Access denied");
     }
 
-    /**
-     * Duplicate key violation — typically idempotent replay.
-     * Return success to maintain idempotency semantics.
-     */
     @ExceptionHandler(DataIntegrityViolationException.class)
-    @ResponseStatus(HttpStatus.OK)
+    @ResponseStatus(HttpStatus.CONFLICT)
     public ApiResponse<Void> handleDataIntegrity(DataIntegrityViolationException ex) {
-        log.debug("Data integrity violation (likely idempotent replay): {}", ex.getMessage());
-        return ApiResponse.ok();
+        log.warn("Data integrity violation", ex);
+        return ApiResponse.error(40000, "Data integrity violation");
     }
 
     @ExceptionHandler(Exception.class)

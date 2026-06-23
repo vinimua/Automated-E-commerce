@@ -38,6 +38,7 @@ public class ProductServiceImpl implements ProductService {
         product.setProductLink(request.getProductLink());
         product.setTargetMarket(request.getTargetMarket());
         product.setLanguage(request.getLanguage());
+        product.setId(UUID.randomUUID());
         product.setStatus("active");
         productMapper.insert(product);
 
@@ -46,6 +47,7 @@ public class ProductServiceImpl implements ProductService {
             ProductImageEntity image = new ProductImageEntity();
             image.setProductId(product.getId());
             image.setUserId(userId);
+            image.setId(UUID.randomUUID());
             image.setUrl(request.getImageUrls().get(i));
             image.setIsPrimary(i == 0); // first image is primary
             productImageMapper.insert(image);

@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
+import com.tk.ai.video.common.json.JsonbTypeHandler;
 import lombok.Data;
 
 import java.time.OffsetDateTime;
@@ -12,10 +12,10 @@ import java.util.Map;
 import java.util.UUID;
 
 @Data
-@TableName("video_tasks")
+@TableName(value = "video_tasks", autoResultMap = true)
 public class VideoTaskEntity {
 
-    @TableId(type = IdType.ASSIGN_UUID)
+    @TableId(type = IdType.INPUT)
     private UUID id;
 
     private UUID userId;
@@ -28,7 +28,7 @@ public class VideoTaskEntity {
     private Boolean needVoiceover;
     private UUID selectedPlanId;
 
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = JsonbTypeHandler.class)
     private Map<String, Object> renderManifest;
 
     private String manifestVersion;

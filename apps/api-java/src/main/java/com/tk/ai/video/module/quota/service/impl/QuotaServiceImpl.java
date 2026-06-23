@@ -36,6 +36,7 @@ public class QuotaServiceImpl implements QuotaService {
         // Step 1: Try to insert the idempotency record
         try {
             QuotaRecordEntity record = QuotaRecordEntity.builder()
+                    .id(UUID.randomUUID())
                     .userId(userId)
                     .taskId(taskId)
                     .type(type)
@@ -92,6 +93,7 @@ public class QuotaServiceImpl implements QuotaService {
         // Step 1: Try to insert the idempotency record
         try {
             QuotaRecordEntity record = QuotaRecordEntity.builder()
+                    .id(UUID.randomUUID())
                     .userId(userId)
                     .taskId(taskId)
                     .type(type)
@@ -132,6 +134,7 @@ public class QuotaServiceImpl implements QuotaService {
     private UserQuotaEntity createInitialQuota(UUID userId) {
         UserQuotaEntity quota = new UserQuotaEntity();
         quota.setUserId(userId);
+        quota.setId(UUID.randomUUID());
         quota.setVideoQuota(0);
         quota.setImageQuota(0);
         quota.setVideoClipQuota(0);

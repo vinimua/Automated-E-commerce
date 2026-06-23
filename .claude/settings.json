@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv sync *)",
+      "Bash(pip3 install *)",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s --connect-timeout 5 http://124.223.200.16:15432/)",
+      "Bash(curl -s --connect-timeout 5 http://124.223.200.16:18088/)",
+      "Bash(curl -s --connect-timeout 5 -o /dev/null -w \"RabbitMQ UI: %{http_code}\" http://124.223.200.16:25673/)",
+      "Bash(uv run *)",
+      "Bash(curl -s --connect-timeout 3 http://localhost:8000/health)",
+      "Bash(cmd.exe /c \"docker --version\")",
+      "Bash(python -m uv pip install -e .)"
+    ]
+  }
+}

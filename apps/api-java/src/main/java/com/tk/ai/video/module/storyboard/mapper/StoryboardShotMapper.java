@@ -2,6 +2,7 @@ package com.tk.ai.video.module.storyboard.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.tk.ai.video.module.storyboard.entity.StoryboardShotEntity;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
 
@@ -12,4 +13,7 @@ import java.util.UUID;
 public interface StoryboardShotMapper extends BaseMapper<StoryboardShotEntity> {
     @Select("SELECT * FROM storyboard_shots WHERE storyboard_id = #{storyboardId} ORDER BY shot_no")
     List<StoryboardShotEntity> findByStoryboardId(UUID storyboardId);
+
+    @Delete("DELETE FROM storyboard_shots WHERE storyboard_id = #{storyboardId}")
+    int deleteByStoryboardId(UUID storyboardId);
 }

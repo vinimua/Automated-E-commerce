@@ -44,7 +44,7 @@ public final class VideoTaskStateMachine {
     );
 
     /**
-     * Maps a failedStage to the retry target status.
+     * Maps a failedStage to the retry target status.失败后重试目标
      */
     private static final Map<String, String> RETRY_TARGETS = Map.of(
             "product_analysis", "analyzing",

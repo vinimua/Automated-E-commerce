@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "generate:api-types": "openapi-typescript ../../docs/02-openapi-spec.yaml -o ./src/types/api.generated.ts"
   },
   "dependencies": {
     "next": "^14.2.15",

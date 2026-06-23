@@ -1,6 +1,8 @@
 package com.tk.ai.video.module.videotask.dto;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
 import java.util.UUID;
@@ -12,9 +14,11 @@ public class CreateVideoTaskRequest {
     private UUID productId;
 
     @NotNull
+    @Min(1)
     private Integer duration;
 
     @NotNull
+    @Pattern(regexp = "pain_point_solution|before_after|review")
     private String videoType;
 
     private Boolean needSubtitles = true;

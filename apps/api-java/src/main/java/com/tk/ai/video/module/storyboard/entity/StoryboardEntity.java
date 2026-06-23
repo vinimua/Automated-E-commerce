@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
+import com.tk.ai.video.common.json.JsonbTypeHandler;
 import lombok.Data;
 
 import java.time.OffsetDateTime;
@@ -13,9 +13,9 @@ import java.util.Map;
 import java.util.UUID;
 
 @Data
-@TableName("storyboards")
+@TableName(value = "storyboards", autoResultMap = true)
 public class StoryboardEntity {
-    @TableId(type = IdType.ASSIGN_UUID)
+    @TableId(type = IdType.INPUT)
     private UUID id;
     private UUID taskId;
     private UUID planId;
@@ -24,14 +24,14 @@ public class StoryboardEntity {
     private String title;
     private String hook;
     private String script;
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = JsonbTypeHandler.class)
     private List<String> subtitles;
     private String coverText;
     private String caption;
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = JsonbTypeHandler.class)
     private List<String> hashtags;
     private String musicSuggestion;
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = JsonbTypeHandler.class)
     private Map<String, Object> rawAiOutput;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;

@@ -11,7 +11,7 @@ import java.util.UUID;
 @Data
 @TableName("storyboard_shots")
 public class StoryboardShotEntity {
-    @TableId(type = IdType.ASSIGN_UUID)
+    @TableId(type = IdType.INPUT)
     private UUID id;
     private UUID storyboardId;
     private UUID taskId;

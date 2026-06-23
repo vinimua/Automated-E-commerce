@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
+import com.tk.ai.video.common.json.JsonbTypeHandler;
 import lombok.Data;
 
 import java.time.OffsetDateTime;
@@ -12,9 +12,9 @@ import java.util.Map;
 import java.util.UUID;
 
 @Data
-@TableName("video_plans")
+@TableName(value = "video_plans", autoResultMap = true)
 public class VideoPlanEntity {
-    @TableId(type = IdType.ASSIGN_UUID)
+    @TableId(type = IdType.INPUT)
     private UUID id;
     private UUID taskId;
     private UUID productId;
@@ -26,7 +26,7 @@ public class VideoPlanEntity {
     private String reason;
     private Integer estimatedDuration;
     private Integer score;
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = JsonbTypeHandler.class)
     private Map<String, Object> rawAiOutput;
     private OffsetDateTime createdAt;
 }

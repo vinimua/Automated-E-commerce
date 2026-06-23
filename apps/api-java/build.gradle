@@ -34,7 +34,7 @@ dependencies {
     implementation "com.baomidou:mybatis-plus-spring-boot3-starter:${mybatisPlusVersion}"
 
     // PostgreSQL + Flyway
-    runtimeOnly 'org.postgresql:postgresql'
+    implementation 'org.postgresql:postgresql'
     implementation "org.flywaydb:flyway-core:${flywayVersion}"
     implementation "org.flywaydb:flyway-database-postgresql:${flywayVersion}"
 
@@ -42,6 +42,9 @@ dependencies {
     implementation "io.jsonwebtoken:jjwt-api:${jjwtVersion}"
     runtimeOnly "io.jsonwebtoken:jjwt-impl:${jjwtVersion}"
     runtimeOnly "io.jsonwebtoken:jjwt-jackson:${jjwtVersion}"
+
+    // Argon2id (required by Spring Security Argon2PasswordEncoder)
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.78'
 
     // Redis
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'

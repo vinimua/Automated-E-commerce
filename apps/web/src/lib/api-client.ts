@@ -23,6 +23,7 @@ export class ApiError extends Error {
 
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
+const AUTH_EXPIRED_EVENT = "tk-auth-expired";
 
 export function setTokens(access: string, refresh: string) {
   accessToken = access;
@@ -39,6 +40,12 @@ export function clearTokens() {
   if (typeof window !== "undefined") {
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
+  }
+}
+
+function notifyAuthExpired() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
   }
 }
 
@@ -103,6 +110,7 @@ export async function apiRequest<T = unknown>(
       });
     } else {
       clearTokens();
+      notifyAuthExpired();
     }
   }
 

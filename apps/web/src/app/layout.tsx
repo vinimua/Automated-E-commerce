@@ -1,30 +1,45 @@
-import type { Metadata } from "next";
+"use client";
+
 import { Inter } from "next/font/google";
-import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
+import { AuthProvider } from "@/hooks/use-auth";
+import { AuthGuard } from "@/components/auth-guard";
+import { NavSidebar } from "@/components/nav-sidebar";
+import { useAuth } from "@/hooks/use-auth";
+import { usePathname } from "next/navigation";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
 
-export const metadata: Metadata = {
-  title: "TK AI Video — TikTok Shop 带货视频生成",
-  description: "AI-powered TikTok Shop video generation platform",
-};
+const PUBLIC_PATHS = ["/login", "/register"];
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+function AppShell({ children }: { children: React.ReactNode }) {
+  const { isLoggedIn } = useAuth();
+  const pathname = usePathname();
+  const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+
+  if (isPublic || !isLoggedIn) {
+    return <main className="min-h-screen bg-background antialiased">{children}</main>;
+  }
+
+  return (
+    <div className="min-h-screen bg-background antialiased">
+      <NavSidebar />
+      <main className="pl-60">{children}</main>
+    </div>
+  );
+}
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-          <main className="min-h-screen bg-background antialiased">
-            {children}
-          </main>
+        <AuthProvider>
+          <AuthGuard>
+            <AppShell>{children}</AppShell>
+          </AuthGuard>
           <Toaster position="top-right" richColors />
-        </ThemeProvider>
+        </AuthProvider>
       </body>
     </html>
   );

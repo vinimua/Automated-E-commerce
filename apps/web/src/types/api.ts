@@ -1,28 +1,30 @@
-// V1 API TypeScript types — placeholder
-// Generated from 02-openapi-spec.yaml during Phase 3.
-// Run: npx openapi-typescript ../../docs/02-openapi-spec.yaml -o ./src/types/api.generated.ts
-//
-// Application-level types that extend the generated API types:
+/**
+ * 🤖 AI AGENTS READ THIS:
+ * All data structure types below MUST come from api.generated.ts (OpenAPI).
+ * The ONLY things allowed in this file:
+ *   1. Type re-exports from api.generated.ts
+ *   2. Pure frontend constants (V1_VIDEO_TYPES, STATUS_LABELS, etc.)
+ *   3. ApiResponse<T> / PageResponse<T> wrappers
+ *
+ * NEVER define data shapes inline (e.g. { code: number; data: Product }).
+ * NEVER hand-write fields that exist in the OpenAPI spec.
+ * If a type is missing, update docs/02-openapi-spec.yaml → run generate:api-types.
+ */
 
 import type { components } from "./api.generated";
 
-export type VideoType = components["schemas"]["VideoType"];
-export type VideoTaskStatus = components["schemas"]["VideoTaskStatus"];
-export type VideoStatus = components["schemas"]["VideoStatus"];
-
-export type ApiResponse<T> = {
-  code: number;
-  message: string;
-  data: T;
+type RequiredAuthData = {
+  userId: string;
+  accessToken: string;
+  refreshToken: string;
 };
-
-export type Product = components["schemas"]["Product"];
-export type VideoTask = components["schemas"]["VideoTask"];
-export type VideoPlan = components["schemas"]["VideoPlan"];
-export type Storyboard = components["schemas"]["Storyboard"];
-export type StoryboardShot = components["schemas"]["StoryboardShot"];
-export type Video = components["schemas"]["Video"];
-export type UserQuota = {
+type RequiredCreateProductData = { productId: string };
+type RequiredCreateVideoTaskData = {
+  taskId: string;
+  status: VideoTaskStatus;
+  progress: number;
+};
+type RequiredQuotaData = {
   videoQuota: number;
   imageQuota: number;
   videoClipQuota: number;
@@ -32,11 +34,75 @@ export type UserQuota = {
   usedVideoClipCount: number;
   usedExportCount: number;
 };
-export type ErrorDetail = components["schemas"]["ErrorDetail"];
 
-// V1 supported videoTypes for create UI
-export const V1_VIDEO_TYPES: VideoType[] = [
-  "pain_point_solution",
-  "before_after",
-  "review",
-];
+// Re-export schema types
+export type VideoType = components["schemas"]["VideoType"];
+export type VideoTaskStatus = components["schemas"]["VideoTaskStatus"];
+export type VideoStatus = components["schemas"]["VideoStatus"];
+export type Product = components["schemas"]["Product"] & {
+  id: string;
+  name: string;
+  targetMarket: string;
+  language: string;
+};
+export type CreateProductRequest = components["schemas"]["CreateProductRequest"];
+export type CreateProductData = RequiredCreateProductData;
+export type CreateProductResponse = components["schemas"]["CreateProductResponse"];
+export type UpdateProductRequest = components["schemas"]["UpdateProductRequest"];
+export type VideoTask = components["schemas"]["VideoTask"] & {
+  taskId: string;
+  productId: string;
+  status: VideoTaskStatus;
+  progress: number;
+  duration: number;
+  videoType: VideoType;
+  needSubtitles: boolean;
+  needVoiceover: boolean;
+  retryCount: number;
+};
+export type CreateVideoTaskRequest = components["schemas"]["CreateVideoTaskRequest"];
+export type CreateVideoTaskData = RequiredCreateVideoTaskData;
+export type CreateVideoTaskResponse = components["schemas"]["CreateVideoTaskResponse"];
+export type VideoPlan = components["schemas"]["VideoPlan"] & {
+  planId: string;
+  type: VideoType;
+  title: string;
+  hook: string;
+};
+export type VideoPlanListData = NonNullable<components["schemas"]["VideoPlanListResponse"]["data"]>;
+export type StoryboardShot = components["schemas"]["StoryboardShot"];
+export type Storyboard = components["schemas"]["Storyboard"];
+export type UpdateStoryboardRequest = components["schemas"]["UpdateStoryboardRequest"];
+export type Video = components["schemas"]["Video"];
+export type VideoExportResponse = components["schemas"]["VideoExportResponse"];
+export type UserQuota = RequiredQuotaData;
+export type PresignedUploadRequest = components["schemas"]["PresignedUploadRequest"];
+export type PresignedUploadResponse = components["schemas"]["PresignedUploadResponse"];
+export type PageMeta = components["schemas"]["PageMeta"];
+export type ErrorDetail = components["schemas"]["ErrorDetail"];
+export type AuthData = RequiredAuthData;
+
+// Wrapped API response envelope
+export type ApiResponse<T> = { code: number; message: string; data: T };
+export type PageResponse<T> = { code: number; message: string; data: { items: T[] } & PageMeta };
+
+// V1 freeze
+export const V1_VIDEO_TYPES: VideoType[] = ["pain_point_solution", "before_after", "review"];
+export const V1_DURATIONS = [15, 20, 25, 30] as const;
+export const PRODUCT_IMAGE_FOLDERS = ["product-images"] as const;
+
+// Status display helpers
+export const STATUS_LABELS: Record<string, string> = {
+  draft: "草稿", analyzing: "AI 分析中", analysis_completed: "分析完成",
+  plan_generated: "方案已生成", waiting_plan_selection: "等待选择方案",
+  script_generating: "生成脚本中", script_generated: "脚本已生成",
+  material_generating: "生成素材中", material_generated: "素材已生成",
+  rendering: "渲染中", checking: "质检中", completed: "已完成",
+  failed: "失败", exported: "已导出",
+};
+
+export const VIDEO_TYPE_LABELS: Record<string, string> = {
+  pain_point_solution: "痛点解决方案",
+  before_after: "前后对比",
+  review: "产品测评",
+};

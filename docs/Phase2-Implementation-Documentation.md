@@ -24,7 +24,7 @@
 | **Java API (api-java)** | Spring Boot 3.3, Java 21, MyBatis-Plus 3.5, JJWT 0.12, Flyway | 8080 | 业务逻辑、唯一状态源 |
 | **Python AI (ai-orchestrator)** | FastAPI, Pydantic 2, Temporal SDK | 8000 | AI 编排、JSON Schema 校验 |
 | **Render Worker** | Node.js, Remotion 4, FFmpeg, RabbitMQ (amqplib) | 后台 | 视频渲染 |
-| **PostgreSQL 16** | — | 15432 | 主数据库（14 张表） |
+| **PostgreSQL 16** | — | 15432 | 主数据库（15 张表，含 refresh_tokens） |
 | **Redis 7** | — | 16380 | 缓存/临时状态 |
 | **RabbitMQ 3.13** | — | 15673/25673 | 渲染任务队列 |
 | **Temporal** | — | 17233/18088 | AI 工作流编排 |
@@ -64,7 +64,7 @@
 
 ## 2. 数据模型字典
 
-> 完整的 14 张表 DDL 见 `docs/01-database-schema.sql`
+> 完整的 15 张表 DDL 见 `docs/01-database-schema.sql`
 
 ### 2.1 核心实体（Java Entity 类）
 
@@ -570,7 +570,7 @@ UserQuotaEntity quota = userQuotaMapper.selectByUserIdForUpdate(userId);
 - Monorepo 目录结构
 - Docker Compose 基础设施（PostgreSQL/Redis/RabbitMQ/Temporal）→ 已部署腾讯云 `124.223.200.16`
 - 4 个服务脚手架（Spring Boot / Next.js / FastAPI / Render Worker）
-- Flyway 数据库迁移（14 张 V1 表）
+- Flyway 数据库迁移（15 张 V1 表，含 refresh_tokens）
 - 环境变量配置（.env, CLAUDE.md）
 
 ### 阶段 2 ✅ 完成（本文档）
@@ -661,7 +661,7 @@ docker compose up -d
 ```bash
 curl http://124.223.200.16:15432   # PostgreSQL
 curl http://124.223.200.16:16380   # Redis (PONG)
-curl http://124.223.200.16:25673   # RabbitMQ UI
+curl http://124.223.200.16:15673   # RabbitMQ UI
 curl http://124.223.200.16:18088   # Temporal UI
 ```
 
@@ -670,7 +670,7 @@ curl http://124.223.200.16:18088   # Temporal UI
 ```bash
 cd apps/api-java
 
-# 首次运行：Flyway 自动执行数据库迁移（14 张表）
+# 首次运行：Flyway 自动执行数据库迁移（15 张表）
 ./gradlew bootRun
 
 # 验证

@@ -12,7 +12,7 @@ import java.util.UUID;
 @TableName("user_quotas")
 public class UserQuotaEntity {
 
-    @TableId(type = IdType.ASSIGN_UUID)
+    @TableId(type = IdType.INPUT)
     private UUID id;
 
     private UUID userId;

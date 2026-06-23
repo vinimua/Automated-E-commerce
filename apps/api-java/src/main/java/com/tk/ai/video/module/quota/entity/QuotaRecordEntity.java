@@ -18,7 +18,7 @@ import java.util.UUID;
 @TableName("quota_records")
 public class QuotaRecordEntity {
 
-    @TableId(type = IdType.ASSIGN_UUID)
+    @TableId(type = IdType.INPUT)
     private UUID id;
 
     private UUID userId;
