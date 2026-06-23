@@ -3,7 +3,7 @@
 import { apiRequest } from "@/lib/api-client";
 import { TaskProgress } from "@/components/task-progress";
 import { STATUS_LABELS, VIDEO_TYPE_LABELS } from "@/types/api";
-import type { VideoTask, VideoPlan } from "@/types/api";
+import type { Video, VideoTask, VideoPlan } from "@/types/api";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -12,9 +12,30 @@ export default function VideoTaskPlansPage() {
   const { id } = useParams<{ id: string }>();
   const [task, setTask] = useState<VideoTask | null>(null);
   const [plans, setPlans] = useState<VideoPlan[]>([]);
+  const [videoId, setVideoId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selecting, setSelecting] = useState(false);
   const [error, setError] = useState("");
+
+  const loadVideoId = useCallback(async (currentTask: VideoTask) => {
+    if (!currentTask.productId) return;
+    try {
+      const params = new URLSearchParams({
+        productId: currentTask.productId,
+        page: "1",
+        pageSize: "20",
+      });
+      const res = await apiRequest<{
+        code: number;
+        message: string;
+        data: { items: Video[] };
+      }>(`/api/videos?${params.toString()}`);
+      const matchedVideo = res.data?.items?.find((video) => video.taskId === currentTask.taskId);
+      setVideoId(matchedVideo?.videoId || null);
+    } catch {
+      setVideoId(null);
+    }
+  }, []);
 
   const loadTask = useCallback(async () => {
     try {
@@ -22,7 +43,12 @@ export default function VideoTaskPlansPage() {
         apiRequest<{ code: number; message: string; data: VideoTask }>(`/api/video-tasks/${id}`),
         apiRequest<{ code: number; message: string; data: { plans: VideoPlan[] } }>(`/api/video-tasks/${id}/plans`).catch(() => ({ code: 0, message: "ok", data: { plans: [] } })),
       ]);
-      if (taskRes.code === 0) setTask(taskRes.data);
+      if (taskRes.code === 0) {
+        setTask(taskRes.data);
+        if (["completed", "exported"].includes(taskRes.data.status)) {
+          loadVideoId(taskRes.data);
+        }
+      }
       if (plansRes.code === 0 && plansRes.data?.plans) setPlans(plansRes.data.plans);
       setError("");
     } catch (e: any) {
@@ -30,7 +56,7 @@ export default function VideoTaskPlansPage() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, loadVideoId]);
 
   useEffect(() => {
     loadTask();
@@ -159,12 +185,23 @@ export default function VideoTaskPlansPage() {
         </div>
       )}
 
-      {isCompleted && (
+      {isCompleted && videoId && (
         <div className="rounded-lg border bg-card p-8 text-center">
           <p className="font-medium">任务已完成</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            视频生成流程已结束。成片预览、下载和视频库入口将在后续阶段完善。
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">视频已生成，点击下方查看</p>
+          <Link
+            href={`/videos/${videoId}`}
+            className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+          >
+            查看成片预览 →
+          </Link>
+        </div>
+      )}
+
+      {isCompleted && !videoId && (
+        <div className="rounded-lg border bg-card p-8 text-center">
+          <p className="font-medium">Video generated</p>
+          <p className="mt-1 text-sm text-muted-foreground">Syncing final video information...</p>
         </div>
       )}
 

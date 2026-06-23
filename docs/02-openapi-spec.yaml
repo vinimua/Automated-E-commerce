@@ -494,6 +494,65 @@ paths:
               schema:
                 $ref: "#/components/schemas/RenderLogListResponse"
 
+  /api/admin/users:
+    get:
+      tags: [Admin]
+      summary: Admin list all users
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Admin user list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserListResponse"
+
+  /api/admin/videos:
+    get:
+      tags: [Admin]
+      summary: Admin list all videos
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/VideoStatus"
+        - name: productId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Admin video list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminVideoListResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1331,4 +1390,67 @@ components:
               items:
                 type: object
             total:
+              type: integer
+
+    UserItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminUserListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/UserItem"
+            page:
+              type: integer
+            pageSize:
+              type: integer
+            total:
+              type: integer
+            totalPages:
+              type: integer
+
+    AdminVideoListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Video"
+            page:
+              type: integer
+            pageSize:
+              type: integer
+            total:
+              type: integer
+            totalPages:
               type: integer

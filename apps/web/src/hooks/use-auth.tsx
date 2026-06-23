@@ -7,6 +7,7 @@ import { apiRequest, setTokens, clearTokens } from "@/lib/api-client";
 interface AuthState {
   userId: string | null;
   email: string | null;
+  role: string | null;
   isLoggedIn: boolean;
   isLoading: boolean;
 }
@@ -20,7 +21,7 @@ interface AuthContextType extends AuthState {
 const AuthContext = createContext<AuthContextType | null>(null);
 const AUTH_EXPIRED_EVENT = "tk-auth-expired";
 
-function decodeJwtPayload(access: string): { sub?: string; email?: string; exp?: number } {
+function decodeJwtPayload(access: string): { sub?: string; email?: string; exp?: number; role?: string } {
   return JSON.parse(atob(access.split(".")[1]));
 }
 
@@ -31,7 +32,7 @@ function isExpired(exp?: number) {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [state, setState] = useState<AuthState>({
-    userId: null, email: null, isLoggedIn: false, isLoading: true,
+    userId: null, email: null, role: null, isLoggedIn: false, isLoading: true,
   });
 
   // Check if user is already logged in (tokens in localStorage)
@@ -49,6 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setState({
           userId: payload.sub ?? null,
           email: payload.email ?? null,
+          role: payload.role ?? null,
           isLoggedIn: true,
           isLoading: false,
         });
@@ -64,7 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     function handleAuthExpired() {
       clearTokens();
-      setState({ userId: null, email: null, isLoggedIn: false, isLoading: false });
+      setState({ userId: null, email: null, role: null, isLoggedIn: false, isLoading: false });
       router.push("/login");
     }
 
@@ -78,7 +80,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
     if (res.code === 0 && res.data) {
       setTokens(res.data.accessToken, res.data.refreshToken);
-      setState({ userId: res.data.userId, email, isLoggedIn: true, isLoading: false });
+      const loginPayload = decodeJwtPayload(res.data.accessToken);
+      setState({ userId: res.data.userId, email, role: loginPayload.role ?? null, isLoggedIn: true, isLoading: false });
       router.push("/dashboard");
     }
   }, [router]);
@@ -89,14 +92,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
     if (res.code === 0 && res.data) {
       setTokens(res.data.accessToken, res.data.refreshToken);
-      setState({ userId: res.data.userId, email, isLoggedIn: true, isLoading: false });
+      const regPayload = decodeJwtPayload(res.data.accessToken);
+      setState({ userId: res.data.userId, email, role: regPayload.role ?? null, isLoggedIn: true, isLoading: false });
       router.push("/dashboard");
     }
   }, [router]);
 
   const logout = useCallback(() => {
     clearTokens();
-    setState({ userId: null, email: null, isLoggedIn: false, isLoading: false });
+    setState({ userId: null, email: null, role: null, isLoggedIn: false, isLoading: false });
     router.push("/login");
   }, [router]);
 

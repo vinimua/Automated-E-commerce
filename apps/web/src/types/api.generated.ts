@@ -474,6 +474,47 @@ export interface paths {
       };
     };
   };
+  "/api/admin/users": {
+    /** Admin list all users */
+    get: {
+      parameters: {
+        query?: {
+          page?: number;
+          pageSize?: number;
+          status?: string;
+        };
+      };
+      responses: {
+        /** @description Admin user list */
+        200: {
+          content: {
+            "application/json": components["schemas"]["AdminUserListResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/admin/videos": {
+    /** Admin list all videos */
+    get: {
+      parameters: {
+        query?: {
+          page?: number;
+          pageSize?: number;
+          status?: components["schemas"]["VideoStatus"];
+          productId?: string;
+        };
+      };
+      responses: {
+        /** @description Admin video list */
+        200: {
+          content: {
+            "application/json": components["schemas"]["AdminVideoListResponse"];
+          };
+        };
+      };
+    };
+  };
 }
 
 export type webhooks = Record<string, never>;
@@ -853,6 +894,38 @@ export interface components {
       data?: {
         items?: Record<string, never>[];
         total?: number;
+      };
+    };
+    UserItem: {
+      /** Format: uuid */
+      id?: string;
+      /** Format: email */
+      email?: string;
+      role?: string;
+      status?: string;
+      /** Format: date-time */
+      createdAt?: string;
+    };
+    AdminUserListResponse: {
+      code?: number;
+      message?: string;
+      data?: {
+        items?: components["schemas"]["UserItem"][];
+        page?: number;
+        pageSize?: number;
+        total?: number;
+        totalPages?: number;
+      };
+    };
+    AdminVideoListResponse: {
+      code?: number;
+      message?: string;
+      data?: {
+        items?: components["schemas"]["Video"][];
+        page?: number;
+        pageSize?: number;
+        total?: number;
+        totalPages?: number;
       };
     };
   };

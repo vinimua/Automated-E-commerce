@@ -82,6 +82,29 @@ export type PageMeta = components["schemas"]["PageMeta"];
 export type ErrorDetail = components["schemas"]["ErrorDetail"];
 export type AuthData = RequiredAuthData;
 
+export type UserItem = components["schemas"]["UserItem"];
+
+// Admin types
+export type AdminUserListData = {
+  items: UserItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+export type AdminVideoListData = {
+  items: Video[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+export type AdminLogItem = Record<string, unknown>;
+export type AdminLogListData = {
+  items: AdminLogItem[];
+  total: number;
+};
+
 // Wrapped API response envelope
 export type ApiResponse<T> = { code: number; message: string; data: T };
 export type PageResponse<T> = { code: number; message: string; data: { items: T[] } & PageMeta };
