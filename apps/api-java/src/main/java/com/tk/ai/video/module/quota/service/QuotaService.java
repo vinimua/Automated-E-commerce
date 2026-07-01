@@ -8,6 +8,8 @@ public interface QuotaService {
 
     UserQuotaResponse getQuotaByUserId(UUID userId);
 
+    void lockAndRefreshDailyQuota(UUID userId);
+
     void consumeQuota(UUID userId, UUID taskId, String type, int amount, String idempotencyKey);
 
     void refundQuota(UUID userId, UUID taskId, String type, int amount, String idempotencyKey);

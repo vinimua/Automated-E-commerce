@@ -5,11 +5,13 @@ import { TaskProgress } from "@/components/task-progress";
 import { STATUS_LABELS, VIDEO_TYPE_LABELS } from "@/types/api";
 import type { Video, VideoTask, VideoPlan } from "@/types/api";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { CancelTaskButton } from "@/components/cancel-task-button";
 
 export default function VideoTaskPlansPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [task, setTask] = useState<VideoTask | null>(null);
   const [plans, setPlans] = useState<VideoPlan[]>([]);
   const [videoId, setVideoId] = useState<string | null>(null);
@@ -68,11 +70,11 @@ export default function VideoTaskPlansPage() {
     setSelecting(true);
     setError("");
     try {
-      const res = await apiRequest<{ code: number; message: string; data: { status: string } }>(`/api/video-tasks/${id}/select-plan`, {
+      const res = await apiRequest<{ code: number; message: string; data: { status: string } }>(`/api/video-tasks/${id}/confirm-plan`, {
         method: "POST", body: { planId },
       });
       if (res.code === 0) {
-        loadTask(); // refresh status
+        router.push(`/video-tasks/${id}/progress`);
       } else {
         setError(res.message || "选择失败");
       }
@@ -92,7 +94,7 @@ export default function VideoTaskPlansPage() {
 
   const isWaiting = task.status === "waiting_plan_selection";
   const isInProgress = ["analyzing", "analysis_completed", "plan_generated"].includes(task.status);
-  const isPostSelection = ["script_generating", "script_generated", "material_generating", "material_generated", "rendering", "checking"].includes(task.status);
+  const isPostSelection = ["storyboard_generating", "script_generating", "script_generated", "material_generating", "material_generated", "rendering", "checking"].includes(task.status);
   const isCompleted = task.status === "completed" || task.status === "exported";
 
   return (
@@ -105,6 +107,9 @@ export default function VideoTaskPlansPage() {
           <span className="ml-2 text-base font-normal text-muted-foreground">{task.duration}s</span>
         </h1>
         <div className="mt-1 flex items-center gap-2">
+          {task && !["completed", "exported", "failed", "cancelled"].includes(task.status) && (
+            <CancelTaskButton taskId={id} />
+          )}
           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
             task.status === "failed" ? "bg-red-100 text-red-700" :
             task.status === "completed" ? "bg-green-100 text-green-700" :

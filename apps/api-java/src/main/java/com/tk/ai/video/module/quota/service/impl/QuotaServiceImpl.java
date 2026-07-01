@@ -13,6 +13,8 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Slf4j
@@ -20,14 +22,29 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class QuotaServiceImpl implements QuotaService {
 
+    private static final int DEFAULT_DAILY_VIDEO_QUOTA = 10;
+    private static final int DEFAULT_DAILY_IMAGE_QUOTA = 50;
+    private static final int DEFAULT_DAILY_VIDEO_CLIP_QUOTA = 10;
+    private static final int DEFAULT_DAILY_EXPORT_QUOTA = 10;
+
     private final UserQuotaMapper userQuotaMapper;
     private final QuotaRecordMapper quotaRecordMapper;
 
     @Override
+    @Transactional
     public UserQuotaResponse getQuotaByUserId(UUID userId) {
-        UserQuotaEntity quota = userQuotaMapper.findByUserId(userId)
+        UserQuotaEntity quota = userQuotaMapper.selectByUserIdForUpdate(userId)
                 .orElseGet(() -> createInitialQuota(userId));
+        resetDailyUsageIfNeeded(quota);
         return toResponse(quota);
+    }
+
+    @Override
+    @Transactional
+    public void lockAndRefreshDailyQuota(UUID userId) {
+        UserQuotaEntity quota = userQuotaMapper.selectByUserIdForUpdate(userId)
+                .orElseGet(() -> createInitialQuota(userId));
+        resetDailyUsageIfNeeded(quota);
     }
 
     @Override
@@ -53,7 +70,8 @@ public class QuotaServiceImpl implements QuotaService {
 
         // Step 2: Lock and update quota counters
         UserQuotaEntity quota = userQuotaMapper.selectByUserIdForUpdate(userId)
-                .orElseThrow(() -> new RuntimeException("Quota not found for user: " + userId));
+                .orElseGet(() -> createInitialQuota(userId));
+        resetDailyUsageIfNeeded(quota);
 
         switch (type) {
             case "video" -> {
@@ -109,7 +127,8 @@ public class QuotaServiceImpl implements QuotaService {
 
         // Step 2: Lock and update quota counters
         UserQuotaEntity quota = userQuotaMapper.selectByUserIdForUpdate(userId)
-                .orElseThrow(() -> new RuntimeException("Quota not found for user: " + userId));
+                .orElseGet(() -> createInitialQuota(userId));
+        resetDailyUsageIfNeeded(quota);
 
         switch (type) {
             case "video" -> {
@@ -135,12 +154,32 @@ public class QuotaServiceImpl implements QuotaService {
         UserQuotaEntity quota = new UserQuotaEntity();
         quota.setUserId(userId);
         quota.setId(UUID.randomUUID());
-        quota.setVideoQuota(0);
-        quota.setImageQuota(0);
-        quota.setVideoClipQuota(0);
-        quota.setExportQuota(0);
+        quota.setVideoQuota(DEFAULT_DAILY_VIDEO_QUOTA);
+        quota.setImageQuota(DEFAULT_DAILY_IMAGE_QUOTA);
+        quota.setVideoClipQuota(DEFAULT_DAILY_VIDEO_CLIP_QUOTA);
+        quota.setExportQuota(DEFAULT_DAILY_EXPORT_QUOTA);
+        quota.setUsedVideoCount(0);
+        quota.setUsedImageCount(0);
+        quota.setUsedVideoClipCount(0);
+        quota.setUsedExportCount(0);
+        quota.setQuotaDate(LocalDate.now());
         userQuotaMapper.insert(quota);
         return quota;
+    }
+
+    private void resetDailyUsageIfNeeded(UserQuotaEntity quota) {
+        LocalDate today = LocalDate.now();
+        if (today.equals(quota.getQuotaDate())) {
+            return;
+        }
+        quota.setUsedVideoCount(0);
+        quota.setUsedImageCount(0);
+        quota.setUsedVideoClipCount(0);
+        quota.setUsedExportCount(0);
+        quota.setQuotaDate(today);
+        quota.setUpdatedAt(OffsetDateTime.now());
+        userQuotaMapper.updateById(quota);
+        log.info("Daily quota usage reset: userId={}, quotaDate={}", quota.getUserId(), today);
     }
 
     private UserQuotaResponse toResponse(UserQuotaEntity quota) {
@@ -153,6 +192,7 @@ public class QuotaServiceImpl implements QuotaService {
         rsp.setUsedImageCount(quota.getUsedImageCount());
         rsp.setUsedVideoClipCount(quota.getUsedVideoClipCount());
         rsp.setUsedExportCount(quota.getUsedExportCount());
+        rsp.setQuotaDate(quota.getQuotaDate());
         return rsp;
     }
 }

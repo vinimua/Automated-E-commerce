@@ -16,7 +16,7 @@ public class AiCallbackRequest {
     @Pattern(regexp = "1\\.0\\.0")
     private String schemaVersion;
     @NotBlank
-    @Pattern(regexp = "product_analysis|video_plan|storyboard|material|quality_check|render_manifest")
+    @Pattern(regexp = "asset_analysis|reference_analysis|creative_plan|product_analysis|video_plan|storyboard|material|quality_check|render_manifest|keyframe|video_clip|qa|repair")
     private String stage;
     @NotBlank
     @Pattern(regexp = "success|failed")
@@ -28,5 +28,14 @@ public class AiCallbackRequest {
     private List<Map<String, Object>> materials;
     private Map<String, Object> renderManifest;
     private Map<String, Object> qualityCheck;
+
+    // Fashion Creative Loop V1 payload fields
+    private Map<String, Object> fashionAssetAnalysis;
+    private Map<String, Object> referenceAnalysis;
+    private List<Map<String, Object>> keyframes;
+    private List<Map<String, Object>> clips;
+    private Map<String, Object> qaResult;
+    private Map<String, Object> repairResult;
+
     private Map<String, Object> error;
 }

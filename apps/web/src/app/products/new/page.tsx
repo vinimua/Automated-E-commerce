@@ -72,7 +72,13 @@ export default function NewProductPage() {
         body: { productId, duration, videoType, needSubtitles },
       });
       if (res.code === 0) {
-        router.push(`/video-tasks/${res.data.taskId}/plans`);
+        // Route based on status — fashion mode starts at asset_uploading, legacy at analyzing
+        const status = res.data.status;
+        if (status === "asset_uploading" || status === "asset_analyzing" || status === "waiting_asset_confirmation") {
+          router.push(`/video-tasks/${res.data.taskId}/assets`);
+        } else {
+          router.push(`/video-tasks/${res.data.taskId}/plans`);
+        }
       } else {
         setTaskError(res.message || "创建任务失败");
       }

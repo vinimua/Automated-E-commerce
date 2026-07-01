@@ -33,6 +33,7 @@ type RequiredQuotaData = {
   usedImageCount: number;
   usedVideoClipCount: number;
   usedExportCount: number;
+  quotaDate: string;
 };
 
 // Re-export schema types
@@ -99,6 +100,15 @@ export type AdminVideoListData = {
   total: number;
   totalPages: number;
 };
+export type AdminQuotaItem = components["schemas"]["AdminQuotaItem"];
+export type AdminQuotaUpdateRequest = components["schemas"]["AdminQuotaUpdateRequest"];
+export type AdminQuotaListData = {
+  items: AdminQuotaItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
 export type AdminLogItem = Record<string, unknown>;
 export type AdminLogListData = {
   items: AdminLogItem[];
@@ -122,6 +132,15 @@ export const STATUS_LABELS: Record<string, string> = {
   material_generating: "生成素材中", material_generated: "素材已生成",
   rendering: "渲染中", checking: "质检中", completed: "已完成",
   failed: "失败", exported: "已导出",
+  // Fashion Creative Loop V1
+  asset_uploading: "上传素材", asset_analyzing: "AI 分析素材中",
+  waiting_asset_confirmation: "等待确认素材", reference_analyzing: "AI 分析参考视频中",
+  plan_generating: "AI 生成方案中", storyboard_generating: "AI 生成分镜中",
+  waiting_storyboard_confirmation: "等待确认分镜",
+  keyframe_configuring: "配置关键帧", image_generating: "AI 生成关键帧中",
+  waiting_image_confirmation: "等待确认关键帧",
+  video_clip_generating: "AI 生成片段中", waiting_video_clip_confirmation: "等待确认片段",
+  waiting_final_review: "等待最终审核", repairing: "修复中", cancelled: "已取消",
 };
 
 export const VIDEO_TYPE_LABELS: Record<string, string> = {

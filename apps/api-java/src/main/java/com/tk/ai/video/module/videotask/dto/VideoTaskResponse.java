@@ -27,4 +27,10 @@ public class VideoTaskResponse {
     private String schemaVersion;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
+
+    // Fashion Creative Loop V1 fields
+    private String taskMode;
+    private String productCategory;
+    private Integer shotCount;
+    private int currentVersion;
 }

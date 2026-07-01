@@ -3,6 +3,11 @@
 import os
 from dataclasses import dataclass, field
 
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
 
 @dataclass
 class Settings:
@@ -18,6 +23,12 @@ class Settings:
     )
 
     # AI Providers
+    text_llm_provider: str = os.getenv("TEXT_LLM_PROVIDER", "openai")
+    text_llm_model: str = os.getenv("TEXT_LLM_MODEL", "gpt-4o-mini")
+    text_llm_api_key: str = os.getenv("TEXT_LLM_API_KEY", "")
+    text_llm_base_url: str = os.getenv("TEXT_LLM_BASE_URL", "")
+
+    # Legacy provider envs are still supported as fallbacks.
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     openai_base_url: str = os.getenv("OPENAI_BASE_URL", "")
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
@@ -25,6 +36,13 @@ class Settings:
     # Image / Video Gen APIs
     image_gen_provider: str = os.getenv("IMAGE_GEN_PROVIDER", "openai")
     video_gen_provider: str = os.getenv("VIDEO_GEN_PROVIDER", "openai")
+    enable_image_generation: bool = os.getenv("ENABLE_IMAGE_GENERATION", "false").lower() == "true"
+    enable_video_generation: bool = os.getenv("ENABLE_VIDEO_GENERATION", "false").lower() == "true"
+    max_image_assets_per_task: int = int(os.getenv("MAX_IMAGE_ASSETS_PER_TASK", "4"))
+    max_video_clips_per_task: int = int(os.getenv("MAX_VIDEO_CLIPS_PER_TASK", "0"))
+    video_gen_require_approval: bool = (
+        os.getenv("VIDEO_GEN_REQUIRE_APPROVAL", "true").lower() == "true"
+    )
 
     # Cost limit per task (USD)
     ai_cost_limit_per_task: float = float(os.getenv("AI_COST_LIMIT_PER_TASK", "5.0"))

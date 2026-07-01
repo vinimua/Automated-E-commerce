@@ -10,7 +10,21 @@ V1_TEMPLATE_MAP = {
     "pain_point_solution": "pain_point_solution_v1",
     "before_after": "before_after_v1",
     "review": "review_v1",
+    "product_showcase": "pain_point_solution_v1",
+    "ugc_style": "review_v1",
+    "tutorial": "pain_point_solution_v1",
 }
+
+RenderVideoType = Literal[
+    "pain_point_solution",
+    "before_after",
+    "review",
+    "product_showcase",
+    "ugc_style",
+    "tutorial",
+]
+
+RenderTemplate = Literal["pain_point_solution_v1", "before_after_v1", "review_v1"]
 
 
 def get_template(video_type: str) -> str:
@@ -82,8 +96,8 @@ class RenderManifest(BaseModel):
     manifestVersion: str = Field(default="1.0.0", pattern=r"^1\.0\.0$")
     taskId: str
     videoId: str = Field(default_factory=lambda: str(uuid4()))
-    videoType: str
-    template: str  # resolved from videoType via V1_TEMPLATE_MAP
+    videoType: RenderVideoType
+    template: RenderTemplate  # resolved from videoType via V1_TEMPLATE_MAP
     resolution: Literal["1080x1920"] = "1080x1920"
     fps: Literal[30] = 30
     duration: int = Field(ge=15, le=30)

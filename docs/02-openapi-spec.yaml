@@ -285,6 +285,364 @@ paths:
               schema:
                 $ref: "#/components/schemas/VideoTaskStatusResponse"
 
+  # ── Fashion Creative Loop V1 (M2) ──
+
+  /api/video-tasks/{taskId}/assets:
+    post:
+      tags: [VideoTasks]
+      summary: Add asset to task
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAssetRequest"
+      responses:
+        "200":
+          description: Asset created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskAssetListResponse"
+    get:
+      tags: [VideoTasks]
+      summary: List task assets
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Asset list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskAssetListResponse"
+
+  /api/video-tasks/{taskId}/assets/{assetId}/role:
+    patch:
+      tags: [VideoTasks]
+      summary: Update asset role
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - name: assetId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAssetRoleRequest"
+      responses:
+        "200":
+          description: Role updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskAssetListResponse"
+
+  /api/video-tasks/{taskId}/assets/confirm:
+    post:
+      tags: [VideoTasks]
+      summary: Confirm assets
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmAssetsRequest"
+      responses:
+        "200":
+          description: Assets confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoTaskStatusResponse"
+
+  /api/video-tasks/{taskId}/creative-state:
+    get:
+      tags: [VideoTasks]
+      summary: Get creative state
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Creative state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreativeStateResponse"
+    patch:
+      tags: [VideoTasks]
+      summary: Update creative state
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCreativeStateRequest"
+      responses:
+        "200":
+          description: Creative state updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreativeStateResponse"
+
+  /api/video-tasks/{taskId}/confirm-plan:
+    post:
+      tags: [VideoTasks]
+      summary: Confirm video plan and proceed to storyboard generation
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmPlanRequest"
+      responses:
+        "200":
+          description: Plan confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoTaskStatusResponse"
+
+  /api/video-tasks/{taskId}/confirm-storyboard:
+    post:
+      tags: [VideoTasks]
+      summary: Confirm storyboard and proceed to keyframe configuration
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Storyboard confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoTaskStatusResponse"
+
+  /api/video-tasks/{taskId}/keyframes:
+    get:
+      tags: [VideoTasks]
+      summary: List keyframes
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Keyframe list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyframeListResponse"
+    post:
+      tags: [VideoTasks]
+      summary: Add keyframe (user upload or AI request)
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateKeyframeRequest"
+      responses:
+        "200":
+          description: Keyframe created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyframeListResponse"
+
+  /api/video-tasks/{taskId}/keyframes/{keyframeId}/confirm:
+    post:
+      tags: [VideoTasks]
+      summary: Confirm a keyframe
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - name: keyframeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmKeyframeRequest"
+      responses:
+        "200":
+          description: Keyframe confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoTaskStatusResponse"
+
+  /api/video-tasks/{taskId}/keyframes/{keyframeId}/reject:
+    post:
+      tags: [VideoTasks]
+      summary: Reject a keyframe
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - name: keyframeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmKeyframeRequest"
+      responses:
+        "200":
+          description: Keyframe rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoTaskStatusResponse"
+
+  /api/video-tasks/{taskId}/video-clips:
+    get:
+      tags: [VideoTasks]
+      summary: List video clips
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Video clip list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoClipListResponse"
+
+  /api/video-tasks/{taskId}/video-clips/{clipId}/confirm:
+    post:
+      tags: [VideoTasks]
+      summary: Confirm a video clip
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - name: clipId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmVideoClipRequest"
+      responses:
+        "200":
+          description: Clip confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoTaskStatusResponse"
+
+  /api/video-tasks/{taskId}/video-clips/{clipId}/reject:
+    post:
+      tags: [VideoTasks]
+      summary: Reject a video clip
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - name: clipId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmVideoClipRequest"
+      responses:
+        "200":
+          description: Clip rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoTaskStatusResponse"
+
+  /api/video-tasks/{taskId}/render:
+    post:
+      tags: [VideoTasks]
+      summary: Request video render from confirmed clips
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Render requested
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoTaskStatusResponse"
+
+  /api/video-tasks/{taskId}/approve:
+    post:
+      tags: [VideoTasks]
+      summary: Approve final video review
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Final video approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoTaskStatusResponse"
+
+  /api/video-tasks/{taskId}/feedback:
+    post:
+      tags: [VideoTasks]
+      summary: Submit feedback for repair
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeedbackRequest"
+      responses:
+        "200":
+          description: Feedback received
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepairEventListResponse"
+
+  /api/video-tasks/{taskId}/repair-events:
+    get:
+      tags: [VideoTasks]
+      summary: List repair events for a task
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Repair event list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepairEventListResponse"
+
   /api/video-tasks/{taskId}/storyboard:
     get:
       tags: [Storyboards]
@@ -553,6 +911,58 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminVideoListResponse"
 
+  /api/admin/quotas:
+    get:
+      tags: [Admin]
+      summary: Admin list user quotas
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Admin quota list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminQuotaListResponse"
+
+  /api/admin/quotas/{userId}:
+    patch:
+      tags: [Admin]
+      summary: Admin update user quota limits
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminQuotaUpdateRequest"
+      responses:
+        "200":
+          description: Updated user quota
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminQuotaDetailResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -641,15 +1051,24 @@ components:
         - pain_point_solution
         - before_after
         - review
+        - product_showcase
+        - ugc_style
+        - tutorial
 
     VideoTaskStatus:
       type: string
       enum:
         - draft
+        - asset_uploading
+        - asset_analyzing
+        - waiting_asset_confirmation
+        - reference_analyzing
+        - plan_generating
         - analyzing
         - analysis_completed
         - plan_generated
         - waiting_plan_selection
+        - storyboard_generating
         - script_generating
         - script_generated
         - material_generating
@@ -659,6 +1078,23 @@ components:
         - completed
         - failed
         - exported
+        - waiting_storyboard_confirmation
+        - keyframe_configuring
+        - image_generating
+        - waiting_image_confirmation
+        - video_clip_generating
+        - waiting_video_clip_confirmation
+        - waiting_final_review
+        - repairing
+        - cancelled
+
+    TaskMode:
+      type: string
+      enum:
+        - PRODUCT_CREATIVE
+        - REFERENCE_STORYBOARD
+        - USER_SCRIPT
+        - CUSTOM_STORYBOARD
 
     VideoStatus:
       type: string
@@ -865,6 +1301,14 @@ components:
         needVoiceover:
           type: boolean
           default: false
+        taskMode:
+          $ref: "#/components/schemas/TaskMode"
+        productCategory:
+          type: string
+          nullable: true
+        shotCount:
+          type: integer
+          nullable: true
 
     CreateVideoTaskResponse:
       type: object
@@ -909,6 +1353,16 @@ components:
           type: string
           format: uuid
           nullable: true
+        taskMode:
+          $ref: "#/components/schemas/TaskMode"
+        productCategory:
+          type: string
+          nullable: true
+        shotCount:
+          type: integer
+          nullable: true
+        currentVersion:
+          type: integer
         errorMessage:
           type: string
           nullable: true
@@ -1250,6 +1704,10 @@ components:
               type: integer
             usedExportCount:
               type: integer
+            quotaDate:
+              type: string
+              format: date
+              description: Natural day for the current usage counters. Usage resets when this date changes.
 
     AiCallbackRequest:
       type: object
@@ -1264,17 +1722,30 @@ components:
         stage:
           type: string
           enum:
+            - asset_analysis
+            - reference_analysis
+            - creative_plan
             - product_analysis
             - video_plan
             - storyboard
             - material
             - quality_check
             - render_manifest
+            - keyframe
+            - video_clip
+            - qa
+            - repair
         status:
           type: string
           enum: [success, failed]
         nextTaskStatus:
           $ref: "#/components/schemas/VideoTaskStatus"
+        fashionAssetAnalysis:
+          type: object
+          nullable: true
+        referenceAnalysis:
+          type: object
+          nullable: true
         productAnalysis:
           type: object
           nullable: true
@@ -1295,6 +1766,22 @@ components:
           type: object
           nullable: true
         qualityCheck:
+          type: object
+          nullable: true
+        keyframes:
+          type: array
+          nullable: true
+          items:
+            type: object
+        clips:
+          type: array
+          nullable: true
+          items:
+            type: object
+        qaResult:
+          type: object
+          nullable: true
+        repairResult:
           type: object
           nullable: true
         error:
@@ -1454,3 +1941,673 @@ components:
               type: integer
             totalPages:
               type: integer
+
+    AdminQuotaItem:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+        status:
+          type: string
+        videoQuota:
+          type: integer
+        imageQuota:
+          type: integer
+        videoClipQuota:
+          type: integer
+        exportQuota:
+          type: integer
+        usedVideoCount:
+          type: integer
+        usedImageCount:
+          type: integer
+        usedVideoClipCount:
+          type: integer
+        usedExportCount:
+          type: integer
+        quotaDate:
+          type: string
+          format: date
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AdminQuotaUpdateRequest:
+      type: object
+      properties:
+        videoQuota:
+          type: integer
+          minimum: 0
+        imageQuota:
+          type: integer
+          minimum: 0
+        videoClipQuota:
+          type: integer
+          minimum: 0
+        exportQuota:
+          type: integer
+          minimum: 0
+
+    AdminQuotaListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/AdminQuotaItem"
+            page:
+              type: integer
+            pageSize:
+              type: integer
+            total:
+              type: integer
+            totalPages:
+              type: integer
+
+    AdminQuotaDetailResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          $ref: "#/components/schemas/AdminQuotaItem"
+
+    # ── Fashion Creative Loop V1 Schemas ──
+
+    TaskAsset:
+      type: object
+      properties:
+        assetId:
+          type: string
+          format: uuid
+        taskId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+          nullable: true
+        shotId:
+          type: string
+          format: uuid
+          nullable: true
+        assetKind:
+          type: string
+          enum: [image, video, audio]
+        url:
+          type: string
+        assetRole:
+          type: string
+          enum:
+            - product_front
+            - product_back
+            - product_detail
+            - model_reference
+            - scene_reference
+            - outfit_reference
+            - reference_video
+            - user_keyframe
+            - generated_result
+            - ai_keyframe
+            - image_variant
+            - video_clip
+            - final_video
+            - cover_image
+        source:
+          type: string
+          enum: [user_upload, ai_generated, external_url]
+        fileName:
+          type: string
+          nullable: true
+        mimeType:
+          type: string
+          nullable: true
+        sizeBytes:
+          type: integer
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          nullable: true
+        confirmed:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreativeState:
+      type: object
+      properties:
+        creativeStateId:
+          type: string
+          format: uuid
+        taskId:
+          type: string
+          format: uuid
+        product:
+          type: object
+          nullable: true
+        model:
+          type: object
+          nullable: true
+        scene:
+          type: object
+          nullable: true
+        outfit:
+          type: object
+          nullable: true
+        referenceVideo:
+          type: object
+          nullable: true
+        constraints:
+          type: object
+          nullable: true
+        userRequirements:
+          type: object
+          nullable: true
+        version:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Keyframe:
+      type: object
+      properties:
+        keyframeId:
+          type: string
+          format: uuid
+        taskId:
+          type: string
+          format: uuid
+        shotId:
+          type: string
+          format: uuid
+        shotNo:
+          type: integer
+        source:
+          type: string
+          enum: [user_upload, existing_asset, ai_generated]
+        assetId:
+          type: string
+          format: uuid
+          nullable: true
+        materialId:
+          type: string
+          format: uuid
+          nullable: true
+        imagePurpose:
+          type: string
+          enum: [first_frame, last_frame, reference, product_detail]
+        url:
+          type: string
+          nullable: true
+        prompt:
+          type: string
+          nullable: true
+        negativePrompt:
+          type: string
+          nullable: true
+        provider:
+          type: string
+          nullable: true
+        modelName:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [draft, generating, generated, uploaded, confirmed, rejected, failed]
+        userInstruction:
+          type: string
+          nullable: true
+        version:
+          type: integer
+        errorMessage:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    KeyframeListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            taskId:
+              type: string
+              format: uuid
+            keyframes:
+              type: array
+              items:
+                $ref: "#/components/schemas/Keyframe"
+
+    ConfirmKeyframeRequest:
+      type: object
+      required: [confirmed]
+      properties:
+        confirmed:
+          type: boolean
+        feedback:
+          type: string
+
+    VideoClip:
+      type: object
+      properties:
+        clipId:
+          type: string
+          format: uuid
+        taskId:
+          type: string
+          format: uuid
+        shotId:
+          type: string
+          format: uuid
+        keyframeId:
+          type: string
+          format: uuid
+          nullable: true
+        shotNo:
+          type: integer
+        source:
+          type: string
+          enum: [user_upload, ai_generated]
+        url:
+          type: string
+          nullable: true
+        prompt:
+          type: string
+          nullable: true
+        negativePrompt:
+          type: string
+          nullable: true
+        provider:
+          type: string
+          nullable: true
+        modelName:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [draft, generating, generated, uploaded, confirmed, rejected, failed]
+        duration:
+          type: integer
+        version:
+          type: integer
+        errorMessage:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    VideoClipListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            taskId:
+              type: string
+              format: uuid
+            clips:
+              type: array
+              items:
+                $ref: "#/components/schemas/VideoClip"
+
+    ConfirmVideoClipRequest:
+      type: object
+      required: [confirmed]
+      properties:
+        confirmed:
+          type: boolean
+        feedback:
+          type: string
+
+    RepairEvent:
+      type: object
+      properties:
+        repairEventId:
+          type: string
+          format: uuid
+        taskId:
+          type: string
+          format: uuid
+        targetType:
+          type: string
+          enum: [storyboard, keyframe, video_clip, render_manifest, final_video, plan]
+        targetId:
+          type: string
+          nullable: true
+        userFeedback:
+          type: string
+        issueType:
+          type: string
+          nullable: true
+        repairScope:
+          type: object
+          nullable: true
+        repairPlan:
+          type: object
+          nullable: true
+        beforeVersion:
+          type: integer
+          nullable: true
+        afterVersion:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [created, in_progress, completed, failed]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    RepairEventListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            taskId:
+              type: string
+              format: uuid
+            events:
+              type: array
+              items:
+                $ref: "#/components/schemas/RepairEvent"
+
+    FeedbackRequest:
+      type: object
+      required: [feedbackText]
+      properties:
+        feedbackText:
+          type: string
+        category:
+          type: string
+
+    QaResult:
+      type: object
+      properties:
+        qaResultId:
+          type: string
+          format: uuid
+        taskId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        targetType:
+          type: string
+          enum: [storyboard, keyframe, video_clip, plan, final_video]
+        targetId:
+          type: string
+          nullable: true
+        score:
+          type: integer
+          nullable: true
+        passed:
+          type: boolean
+        issues:
+          type: object
+          nullable: true
+        suggestions:
+          type: array
+          items:
+            type: string
+          nullable: true
+        repairInstruction:
+          type: string
+          nullable: true
+        rawAiOutput:
+          type: object
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    VideoFingerprint:
+      type: object
+      properties:
+        fingerprintId:
+          type: string
+          format: uuid
+        taskId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+          nullable: true
+        userId:
+          type: string
+          format: uuid
+        openingType:
+          type: string
+          nullable: true
+        mainAction:
+          type: string
+          nullable: true
+        endingType:
+          type: string
+          nullable: true
+        mainVisual:
+          type: string
+          nullable: true
+        shotSequence:
+          type: object
+          nullable: true
+        cameraSequence:
+          type: object
+          nullable: true
+        scenePosition:
+          type: object
+          nullable: true
+        similarityScore:
+          type: integer
+          nullable: true
+        comparedWith:
+          type: object
+          nullable: true
+        rawFingerprint:
+          type: object
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    CreativeStateResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          $ref: "#/components/schemas/CreativeState"
+
+    UpdateCreativeStateRequest:
+      type: object
+      properties:
+        product:
+          type: object
+        model:
+          type: object
+        scene:
+          type: object
+        outfit:
+          type: object
+        referenceVideo:
+          type: object
+        constraints:
+          type: object
+        userRequirements:
+          type: object
+
+    TaskAssetListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            taskId:
+              type: string
+              format: uuid
+            assets:
+              type: array
+              items:
+                $ref: "#/components/schemas/TaskAsset"
+
+    UpdateAssetRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum:
+            - product_front
+            - product_back
+            - product_detail
+            - model_reference
+            - scene_reference
+            - outfit_reference
+            - reference_video
+            - user_keyframe
+            - generated_result
+            - ai_keyframe
+            - image_variant
+            - video_clip
+            - final_video
+            - cover_image
+        shotId:
+          type: string
+          format: uuid
+          nullable: true
+
+    ConfirmAssetsRequest:
+      type: object
+      properties:
+        assetIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    ConfirmPlanRequest:
+      type: object
+      required: [planId]
+      properties:
+        planId:
+          type: string
+          format: uuid
+
+    CreateAssetRequest:
+      type: object
+      required: [assetKind, assetRole, url, source]
+      properties:
+        assetKind:
+          type: string
+          enum: [image, video, audio]
+        assetRole:
+          type: string
+        url:
+          type: string
+        source:
+          type: string
+          enum: [user_upload, ai_generated, external_url]
+        fileName:
+          type: string
+          nullable: true
+        mimeType:
+          type: string
+          nullable: true
+        sizeBytes:
+          type: integer
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          nullable: true
+
+    CreateKeyframeRequest:
+      type: object
+      required: [shotNo]
+      properties:
+        shotNo:
+          type: integer
+        source:
+          type: string
+          enum: [user_upload, existing_asset, ai_generated]
+          default: user_upload
+        assetId:
+          type: string
+          format: uuid
+          nullable: true
+        imagePurpose:
+          type: string
+          enum: [first_frame, last_frame, reference, product_detail]
+          default: first_frame
+        url:
+          type: string
+          nullable: true
+        prompt:
+          type: string
+          nullable: true
+        userInstruction:
+          type: string
+          nullable: true

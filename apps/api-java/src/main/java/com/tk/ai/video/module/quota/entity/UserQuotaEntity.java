@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -27,6 +28,7 @@ public class UserQuotaEntity {
     private int usedVideoClipCount;
     private int usedExportCount;
 
+    private LocalDate quotaDate;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 }

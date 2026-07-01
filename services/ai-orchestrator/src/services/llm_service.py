@@ -146,27 +146,51 @@ FIXTURES = {
 }
 
 
-def _is_fake_mode() -> bool:
-    return not settings.openai_api_key and not settings.anthropic_api_key
+TEXT_TASK_TYPES = {
+    "product_analysis",
+    "video_plans",
+    "script",
+    "storyboard",
+    "quality_check",
+}
+
+
+def _text_llm_api_key() -> str:
+    return settings.text_llm_api_key or settings.openai_api_key or settings.anthropic_api_key
+
+
+def _is_fake_mode(task_type: str) -> bool:
+    if task_type == "materials":
+        return not (settings.enable_image_generation or settings.enable_video_generation)
+    return not _text_llm_api_key()
 
 
 async def call_llm(task_type: str, system_prompt: str, user_prompt: str, model: str = "gpt-4o") -> dict:
-    """Call LLM (OpenAI or Anthropic). In fake mode, returns fixture data."""
+    """Call the configured text LLM. In fake mode, returns fixture data."""
     correlation_id = ""  # set from activity context
 
-    if _is_fake_mode():
+    if _is_fake_mode(task_type):
         fixture = FIXTURES.get(task_type)
         if fixture is None:
             raise ValueError(f"No fixture defined for task_type: {task_type}")
         log.info("FAKE LLM call: task_type=%s, model=%s", task_type, model)
         return fixture
 
-    if settings.openai_api_key:
-        return await _call_openai(task_type, system_prompt, user_prompt, model)
-    if settings.anthropic_api_key:
-        return await _call_anthropic(task_type, system_prompt, user_prompt, model)
+    if task_type not in TEXT_TASK_TYPES:
+        raise RuntimeError(
+            f"task_type={task_type} is not a text LLM task. "
+            "Use image/video generation services for paid media generation."
+        )
 
-    raise RuntimeError("No AI provider configured. Set OPENAI_API_KEY or ANTHROPIC_API_KEY.")
+    text_model = model if model != "gpt-4o" else settings.text_llm_model
+    provider = settings.text_llm_provider.lower()
+
+    if provider in {"openai", "openai_compatible"}:
+        return await _call_openai(task_type, system_prompt, user_prompt, text_model)
+    if provider == "anthropic":
+        return await _call_anthropic(task_type, system_prompt, user_prompt, text_model)
+
+    raise RuntimeError(f"Unsupported TEXT_LLM_PROVIDER: {settings.text_llm_provider}")
 
 
 async def _call_openai(task_type: str, system_prompt: str, user_prompt: str, model: str) -> dict:
@@ -175,7 +199,9 @@ async def _call_openai(task_type: str, system_prompt: str, user_prompt: str, mod
     except ImportError:
         raise RuntimeError("openai package not installed")
 
-    client = AsyncOpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url or None)
+    api_key = settings.text_llm_api_key or settings.openai_api_key
+    base_url = settings.text_llm_base_url or settings.openai_base_url or None
+    client = AsyncOpenAI(api_key=api_key, base_url=base_url)
     response = await client.chat.completions.create(
         model=model,
         messages=[
@@ -200,7 +226,8 @@ async def _call_anthropic(task_type: str, system_prompt: str, user_prompt: str, 
     except ImportError:
         raise RuntimeError("anthropic package not installed")
 
-    client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+    api_key = settings.text_llm_api_key or settings.anthropic_api_key
+    client = AsyncAnthropic(api_key=api_key)
     response = await client.messages.create(
         model=model or "claude-sonnet-4-6",
         max_tokens=4096,

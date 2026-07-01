@@ -2,6 +2,8 @@ package com.tk.ai.video.module.quota.dto;
 
 import lombok.Data;
 
+import java.time.LocalDate;
+
 @Data
 public class UserQuotaResponse {
 
@@ -14,4 +16,5 @@ public class UserQuotaResponse {
     private int usedImageCount;
     private int usedVideoClipCount;
     private int usedExportCount;
+    private LocalDate quotaDate;
 }

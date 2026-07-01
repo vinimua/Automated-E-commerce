@@ -18,9 +18,14 @@ public class CreateVideoTaskRequest {
     private Integer duration;
 
     @NotNull
-    @Pattern(regexp = "pain_point_solution|before_after|review")
+    @Pattern(regexp = "pain_point_solution|before_after|review|product_showcase|ugc_style|tutorial")
     private String videoType;
 
     private Boolean needSubtitles = true;
     private Boolean needVoiceover = false;
+
+    // Fashion Creative Loop V1 fields
+    private String taskMode;
+    private String productCategory;
+    private Integer shotCount;
 }

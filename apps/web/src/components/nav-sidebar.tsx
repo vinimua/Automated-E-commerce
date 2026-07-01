@@ -28,6 +28,7 @@ const adminNavItems = [
   { href: "/admin/users", label: "User Management", icon: Users },
   { href: "/admin/video-tasks", label: "Task Management", icon: Video },
   { href: "/admin/videos", label: "Video Management", icon: Film },
+  { href: "/admin/quotas", label: "Quota Management", icon: BarChart3 },
   { href: "/admin/model-logs", label: "AI Logs", icon: FileText },
   { href: "/admin/render-logs", label: "Render Logs", icon: Activity },
 ];

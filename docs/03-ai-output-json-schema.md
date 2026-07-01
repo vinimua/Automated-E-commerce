@@ -741,12 +741,19 @@ AI 服务所有输出必须满足以下要求：
     "stage": {
       "type": "string",
       "enum": [
+        "asset_analysis",
+        "reference_analysis",
+        "creative_plan",
         "product_analysis",
         "video_plan",
         "storyboard",
         "material",
         "quality_check",
-        "render_manifest"
+        "render_manifest",
+        "keyframe",
+        "video_clip",
+        "qa",
+        "repair"
       ]
     },
     "status": {
@@ -759,14 +766,37 @@ AI 服务所有输出必须满足以下要求：
     "nextTaskStatus": {
       "type": "string",
       "enum": [
+        "asset_uploading",
+        "asset_analyzing",
+        "reference_analyzing",
+        "plan_generating",
         "analysis_completed",
         "plan_generated",
+        "storyboard_generating",
         "script_generated",
         "material_generated",
         "checking",
         "rendering",
-        "failed"
+        "failed",
+        "waiting_asset_confirmation",
+        "waiting_plan_selection",
+        "waiting_storyboard_confirmation",
+        "keyframe_configuring",
+        "image_generating",
+        "waiting_image_confirmation",
+        "video_clip_generating",
+        "waiting_video_clip_confirmation",
+        "waiting_final_review",
+        "repairing",
+        "completed",
+        "cancelled"
       ]
+    },
+    "fashionAssetAnalysis": {
+      "$ref": "fashion-asset-analysis.schema.json"
+    },
+    "referenceAnalysis": {
+      "type": "object"
     },
     "productAnalysis": {
       "$ref": "product-analysis.schema.json"
@@ -785,6 +815,18 @@ AI 服务所有输出必须满足以下要求：
     },
     "renderManifest": {
       "type": "object"
+    },
+    "keyframes": {
+      "$ref": "keyframe-generation-result.schema.json#/properties/keyframes"
+    },
+    "clips": {
+      "$ref": "video-clip-generation-result.schema.json#/properties/clips"
+    },
+    "qaResult": {
+      "$ref": "fashion-qa-result.schema.json"
+    },
+    "repairResult": {
+      "$ref": "repair-result.schema.json"
     },
     "error": {
       "type": "object",
@@ -857,3 +899,579 @@ Pydantic Model + jsonschema 双重校验
 6. 修复失败则重试。
 7. 重试超过次数后回调 Java failed。
 ```
+
+---
+
+## 10. FashionAssetAnalysis Schema (Fashion Creative Loop)
+
+### 10.1 Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tk-ai-video.local/schemas/fashion-asset-analysis.schema.json",
+  "title": "FashionAssetAnalysis",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "productCategory",
+    "styleAttributes",
+    "visualFeatures",
+    "recommendedAngles",
+    "assetQualityScore"
+  ],
+  "properties": {
+    "productCategory": {
+      "type": "string",
+      "minLength": 1
+    },
+    "styleAttributes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "visualFeatures": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "colors": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "patterns": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "materials": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "fit": {
+          "type": "string"
+        },
+        "occasions": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "recommendedAngles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "assetQualityScore": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "missingAngles": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "lightingNotes": {
+      "type": "string"
+    },
+    "backgroundRecommendations": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "modelRequirements": {
+      "type": "string"
+    }
+  }
+}
+```
+
+### 10.2 示例
+
+```json
+{
+  "productCategory": "Women's Summer Dress",
+  "styleAttributes": ["floral", "casual", "A-line", "midi"],
+  "visualFeatures": {
+    "colors": ["white", "blue"],
+    "patterns": ["floral print"],
+    "materials": ["cotton", "linen"],
+    "fit": "relaxed",
+    "occasions": ["beach", "casual outdoor", "vacation"]
+  },
+  "recommendedAngles": [
+    "full front view",
+    "side view showing silhouette",
+    "back detail of floral pattern",
+    "fabric texture close-up",
+    "worn on model walking"
+  ],
+  "assetQualityScore": 85,
+  "missingAngles": ["detail of neckline", "back zipper detail"],
+  "lightingNotes": "Natural outdoor sunlight, golden hour preferred",
+  "backgroundRecommendations": ["beach", "garden", "white wall minimal"],
+  "modelRequirements": "Size S model, 5'6\"-5'8\", natural pose"
+}
+```
+
+---
+
+## 11. KeyframeGenerationResult Schema (Fashion Creative Loop)
+
+### 11.1 Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tk-ai-video.local/schemas/keyframe-generation-result.schema.json",
+  "title": "KeyframeGenerationResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["keyframes"],
+  "properties": {
+    "keyframes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["shotNo", "status"],
+        "properties": {
+          "shotNo": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": ["completed", "failed"]
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "negativePrompt": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "modelName": {
+            "type": "string"
+          },
+          "qualityScore": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "errorMessage": {
+            "type": "string"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "status": { "const": "completed" } },
+              "required": ["status"]
+            },
+            "then": { "required": ["url"] }
+          },
+          {
+            "if": {
+              "properties": { "status": { "const": "failed" } },
+              "required": ["status"]
+            },
+            "then": { "required": ["errorMessage"] }
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+### 11.2 示例
+
+```json
+{
+  "keyframes": [
+    {
+      "shotNo": 1,
+      "status": "completed",
+      "url": "https://cos.example.com/users/u1/tasks/t1/ai-images/shot-1.png",
+      "prompt": "Fashion keyframe: full front view of floral summer dress on model, beach background, golden hour lighting, 9:16 vertical, TikTok style",
+      "negativePrompt": "deformed body, extra limbs, distorted face, watermark, low quality",
+      "provider": "image_model_provider",
+      "modelName": "example-image-model",
+      "qualityScore": 88
+    }
+  ]
+}
+```
+
+---
+
+## 12. VideoClipGenerationResult Schema (Fashion Creative Loop)
+
+### 12.1 Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tk-ai-video.local/schemas/video-clip-generation-result.schema.json",
+  "title": "VideoClipGenerationResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["clips"],
+  "properties": {
+    "clips": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["shotNo", "status"],
+        "properties": {
+          "shotNo": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": ["completed", "failed"]
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "negativePrompt": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "modelName": {
+            "type": "string"
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          },
+          "qualityScore": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "errorMessage": {
+            "type": "string"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "status": { "const": "completed" } },
+              "required": ["status"]
+            },
+            "then": { "required": ["url", "duration"] }
+          },
+          {
+            "if": {
+              "properties": { "status": { "const": "failed" } },
+              "required": ["status"]
+            },
+            "then": { "required": ["errorMessage"] }
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+### 12.2 示例
+
+```json
+{
+  "clips": [
+    {
+      "shotNo": 1,
+      "status": "completed",
+      "url": "https://cos.example.com/users/u1/tasks/t1/ai-clips/shot-1.mp4",
+      "prompt": "Fashion video: model walking on beach in floral summer dress, gentle breeze blowing fabric, 9:16 vertical, natural lighting, 3 seconds",
+      "negativePrompt": "deformed body, extra limbs, distorted face, jittery motion, watermark",
+      "provider": "video_model_provider",
+      "modelName": "example-video-model",
+      "duration": 3,
+      "qualityScore": 82
+    }
+  ]
+}
+```
+
+---
+
+## 13. RepairResult Schema (Fashion Creative Loop)
+
+### 13.1 Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tk-ai-video.local/schemas/repair-result.schema.json",
+  "title": "RepairResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["feedbackCategory", "targetType", "strategy", "affectedShots"],
+  "properties": {
+    "feedbackCategory": {
+      "type": "string",
+      "enum": [
+        "visual_quality",
+        "product_accuracy",
+        "lighting_issue",
+        "action_stiffness",
+        "missing_detail",
+        "layout_composition",
+        "style_mismatch",
+        "other"
+      ]
+    },
+    "targetType": {
+      "type": "string",
+      "enum": ["storyboard", "keyframe", "video_clip", "plan"]
+    },
+    "strategy": {
+      "type": "string",
+      "enum": [
+        "rewrite_storyboard_shot",
+        "regenerate_keyframe_prompt",
+        "regenerate_keyframe",
+        "regenerate_video_clip_prompt",
+        "regenerate_video_clip",
+        "adjust_edit_instruction",
+        "reorder_shots"
+      ]
+    },
+    "affectedShots": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "repairNotes": {
+      "type": "string"
+    },
+    "preserveConstraints": {
+      "type": "object",
+      "properties": {
+        "productDetails": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "styleAttributes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "newPrompt": {
+      "type": "string"
+    },
+    "newStoryboardShot": {
+      "type": "object"
+    },
+    "estimatedCostTier": {
+      "type": "string",
+      "enum": ["cheap", "moderate", "expensive"]
+    },
+    "requiresUserConfirmation": {
+      "type": "boolean"
+    }
+  }
+}
+```
+
+### 13.2 示例
+
+```json
+{
+  "feedbackCategory": "missing_detail",
+  "targetType": "keyframe",
+  "strategy": "regenerate_keyframe_prompt",
+  "affectedShots": [3],
+  "repairNotes": "Back floral pattern detail not visible in current keyframe. Adjusting prompt to emphasize back view and pattern details.",
+  "preserveConstraints": {
+    "productDetails": ["floral print pattern", "A-line silhouette"],
+    "styleAttributes": ["casual", "feminine"]
+  },
+  "newPrompt": "Fashion keyframe: back view of floral summer dress showing detailed blue floral pattern on white fabric, outdoor natural lighting, 9:16 vertical, TikTok style, fabric detail visible",
+  "estimatedCostTier": "cheap",
+  "requiresUserConfirmation": false
+}
+```
+
+---
+
+## 14. FashionQaResult Schema (Fashion Creative Loop)
+
+### 14.1 Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tk-ai-video.local/schemas/fashion-qa-result.schema.json",
+  "title": "FashionQaResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "stage",
+    "qualityScore",
+    "checks",
+    "needsHumanReview"
+  ],
+  "properties": {
+    "stage": {
+      "type": "string",
+      "enum": ["keyframe", "video_clip", "storyboard", "final_video"]
+    },
+    "qualityScore": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "riskScore": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "productVisible",
+        "styleAccurate",
+        "lightingAcceptable",
+        "compositionValid",
+        "noArtifacts"
+      ],
+      "properties": {
+        "productVisible": {
+          "type": "boolean"
+        },
+        "styleAccurate": {
+          "type": "boolean"
+        },
+        "lightingAcceptable": {
+          "type": "boolean"
+        },
+        "compositionValid": {
+          "type": "boolean"
+        },
+        "noArtifacts": {
+          "type": "boolean"
+        },
+        "modelNatural": {
+          "type": "boolean"
+        },
+        "fabricDetailVisible": {
+          "type": "boolean"
+        },
+        "colorAccuracy": {
+          "type": "boolean"
+        }
+      }
+    },
+    "suggestions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "complianceTips": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "forbiddenClaims": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "needsHumanReview": {
+      "type": "boolean"
+    }
+  }
+}
+```
+
+### 14.2 示例
+
+```json
+{
+  "stage": "keyframe",
+  "qualityScore": 88,
+  "riskScore": 10,
+  "checks": {
+    "productVisible": true,
+    "styleAccurate": true,
+    "lightingAcceptable": true,
+    "compositionValid": true,
+    "noArtifacts": true,
+    "modelNatural": true,
+    "fabricDetailVisible": true,
+    "colorAccuracy": true
+  },
+  "suggestions": [
+    "Keyframe composition is well-balanced.",
+    "Fabric texture could be enhanced in close-up shots."
+  ],
+  "complianceTips": [
+    "Ensure no exaggerated slimming claims in subtitles."
+  ],
+  "forbiddenClaims": [],
+  "needsHumanReview": false
+}
+```
+
+---
+
+## 15. Fashion Creative Loop Callback Stage Contract
+
+| Stage | Callback Direction | nextTaskStatus (success) | nextTaskStatus (failed) |
+|---|---|---|---|
+| `asset_analysis` | Python → Java | `waiting_asset_confirmation` | `failed` |
+| `reference_analysis` | Python → Java | `waiting_asset_confirmation` | `failed` |
+| `creative_plan` | Python → Java | `waiting_plan_selection` | `failed` |
+| `product_analysis` | Python → Java | `analysis_completed` | `failed` |
+| `video_plan` | Python → Java | `plan_generated` | `failed` |
+| `storyboard` | Python → Java | `script_generated` | `failed` |
+| `material` | Python → Java | `material_generated` | `failed` |
+| `quality_check` | Python → Java | `checking` | `failed` |
+| `render_manifest` | Python → Java | `rendering` | `failed` |
+| `keyframe` | Python → Java | `waiting_image_confirmation` | `failed` |
+| `video_clip` | Python → Java | `waiting_video_clip_confirmation` | `failed` |
+| `qa` | Python → Java | (depends on QA target) | `failed` |
+| `repair` | Python → Java | `repairing` (then transition) | `failed` |
+
+Callback payload fields per stage:
+
+| Stage | Required Payload Field |
+|---|---|
+| `asset_analysis` | `fashionAssetAnalysis` |
+| `reference_analysis` | `referenceAnalysis` |
+| `creative_plan` | `plans` |
+| `product_analysis` | `productAnalysis` |
+| `video_plan` | `plans` |
+| `storyboard` | `storyboard` |
+| `material` | `materials` |
+| `quality_check` | `qualityCheck` |
+| `render_manifest` | `renderManifest` |
+| `keyframe` | `keyframes` |
+| `video_clip` | `clips` |
+| `qa` | `qaResult` |
+| `repair` | `repairResult` |

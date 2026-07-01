@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, RefreshCw } from "lucide-react";
+import { CancelTaskButton } from "@/components/cancel-task-button";
 
 export default function TaskProgressPage() {
   const { id } = useParams<{ id: string }>();
@@ -115,6 +116,10 @@ export default function TaskProgressPage() {
   const isCompleted = task.status === "completed" || task.status === "exported";
   const isFailed = task.status === "failed";
   const isTerminal = isCompleted || isFailed;
+  const isFashionAssetStage = ["asset_uploading", "asset_analyzing", "waiting_asset_confirmation"].includes(task.status);
+  const isFashionKeyframeStage = ["keyframe_configuring", "image_generating", "waiting_image_confirmation"].includes(task.status);
+  const isFashionClipStage = ["video_clip_generating", "waiting_video_clip_confirmation"].includes(task.status);
+  const isFashionReviewStage = ["waiting_final_review", "repairing", "rendering"].includes(task.status);
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 p-8">
@@ -141,6 +146,7 @@ export default function TaskProgressPage() {
           </span>
           <span className="text-sm text-muted-foreground">{task.progress}%</span>
         </div>
+        {!isTerminal && <CancelTaskButton taskId={id} />}
       </div>
 
       {/* Progress bar */}
@@ -154,6 +160,40 @@ export default function TaskProgressPage() {
             className="block rounded-lg border bg-card p-4 text-center text-sm font-medium text-primary hover:bg-accent transition-colors"
           >
             查看分镜脚本 →
+          </Link>
+        )}
+
+        {/* Fashion Creative Loop V1 action links */}
+        {isFashionAssetStage && (
+          <Link
+            href={`/video-tasks/${id}/assets`}
+            className="block rounded-lg border border-blue-500/50 bg-blue-50 p-4 text-center text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+          >
+            📷 管理素材 →
+          </Link>
+        )}
+        {isFashionKeyframeStage && (
+          <Link
+            href={`/video-tasks/${id}/keyframes`}
+            className="block rounded-lg border border-purple-500/50 bg-purple-50 p-4 text-center text-sm font-medium text-purple-700 hover:bg-purple-100 transition-colors"
+          >
+            🖼️ 管理关键帧 →
+          </Link>
+        )}
+        {isFashionClipStage && (
+          <Link
+            href={`/video-tasks/${id}/clips`}
+            className="block rounded-lg border border-orange-500/50 bg-orange-50 p-4 text-center text-sm font-medium text-orange-700 hover:bg-orange-100 transition-colors"
+          >
+            🎬 管理视频片段 →
+          </Link>
+        )}
+        {isFashionReviewStage && (
+          <Link
+            href={`/video-tasks/${id}/review`}
+            className="block rounded-lg border border-green-500/50 bg-green-50 p-4 text-center text-sm font-medium text-green-700 hover:bg-green-100 transition-colors"
+          >
+            ✅ 查看成片审核 →
           </Link>
         )}
 

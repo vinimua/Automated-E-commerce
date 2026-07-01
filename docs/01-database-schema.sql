@@ -15,16 +15,45 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- users.status: active / disabled
 
 -- video_tasks.status:
--- draft / analyzing / analysis_completed / plan_generated /
--- waiting_plan_selection / script_generating / script_generated /
+-- draft / asset_uploading / asset_analyzing / waiting_asset_confirmation /
+-- reference_analyzing / plan_generating / analyzing / analysis_completed /
+-- plan_generated / waiting_plan_selection / storyboard_generating /
+-- script_generating / script_generated /
 -- material_generating / material_generated / rendering / checking /
--- completed / failed / exported
+-- completed / failed / exported / cancelled
+--
+-- Fashion Creative Loop extension:
+-- waiting_storyboard_confirmation / keyframe_configuring /
+-- image_generating / waiting_image_confirmation /
+-- video_clip_generating / waiting_video_clip_confirmation /
+-- waiting_final_review / repairing
+--
+-- video_tasks.task_mode:
+-- PRODUCT_CREATIVE / REFERENCE_STORYBOARD / USER_SCRIPT / CUSTOM_STORYBOARD
 
 -- videos.status:
 -- completed / exported / deleted
 
 -- materials.status:
 -- generating / completed / failed / replaced
+--
+-- keyframes.source:
+-- user_upload / existing_asset / ai_generated
+--
+-- keyframes.status:
+-- draft / generating / generated / uploaded / confirmed / rejected / failed
+--
+-- video_clips.source:
+-- user_upload / ai_generated
+--
+-- video_clips.status:
+-- draft / generating / generated / uploaded / confirmed / rejected / failed
+--
+-- repair_events.status:
+-- created / in_progress / completed / failed
+--
+-- repair_events.target_type:
+-- storyboard / keyframe / video_clip / render_manifest / final_video / plan
 
 -- quota_records.direction:
 -- consume / refund / grant
@@ -40,13 +69,22 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- V1 code must persist the exact contract version used by AI callbacks and
 -- RenderManifest so old tasks remain debuggable after future schema changes.
 
--- video_tasks.status transition:
+-- video_tasks.status transition (V1 Core):
 -- draft -> analyzing -> analysis_completed -> plan_generated -> waiting_plan_selection
 -- waiting_plan_selection -> script_generating -> script_generated
 -- script_generated -> material_generating -> material_generated
 -- material_generated -> rendering -> checking -> completed
 -- completed -> exported
 -- Any in-progress state may transition to failed.
+--
+-- video_tasks.status transition (Fashion Creative Loop extension):
+-- waiting_storyboard_confirmation -> keyframe_configuring
+-- keyframe_configuring -> image_generating
+-- keyframe_configuring -> waiting_image_confirmation
+-- waiting_image_confirmation -> video_clip_generating
+-- waiting_video_clip_confirmation -> rendering
+-- waiting_final_review -> completed
+-- waiting_final_review -> repairing
 
 -- ============================================================
 -- 2. USERS
@@ -76,16 +114,17 @@ CREATE TABLE user_quotas (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 
-    video_quota INT NOT NULL DEFAULT 0,
-    image_quota INT NOT NULL DEFAULT 0,
-    video_clip_quota INT NOT NULL DEFAULT 0,
-    export_quota INT NOT NULL DEFAULT 0,
+    video_quota INT NOT NULL DEFAULT 10,
+    image_quota INT NOT NULL DEFAULT 50,
+    video_clip_quota INT NOT NULL DEFAULT 10,
+    export_quota INT NOT NULL DEFAULT 10,
 
     used_video_count INT NOT NULL DEFAULT 0,
     used_image_count INT NOT NULL DEFAULT 0,
     used_video_clip_count INT NOT NULL DEFAULT 0,
     used_export_count INT NOT NULL DEFAULT 0,
 
+    quota_date DATE NOT NULL DEFAULT CURRENT_DATE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
@@ -181,6 +220,10 @@ CREATE TABLE video_tasks (
 
     duration INT NOT NULL,
     video_type VARCHAR(100) NOT NULL,
+    task_mode VARCHAR(80) NOT NULL DEFAULT 'PRODUCT_CREATIVE',
+    product_category VARCHAR(80) NOT NULL DEFAULT 'general',
+    shot_count INT,
+    current_version INT NOT NULL DEFAULT 1,
     need_subtitles BOOLEAN NOT NULL DEFAULT TRUE,
     need_voiceover BOOLEAN NOT NULL DEFAULT FALSE,
 
@@ -207,10 +250,16 @@ CREATE TABLE video_tasks (
     CONSTRAINT chk_video_tasks_status CHECK (
         status IN (
             'draft',
+            'asset_uploading',
+            'asset_analyzing',
+            'waiting_asset_confirmation',
+            'reference_analyzing',
+            'plan_generating',
             'analyzing',
             'analysis_completed',
             'plan_generated',
             'waiting_plan_selection',
+            'storyboard_generating',
             'script_generating',
             'script_generated',
             'material_generating',
@@ -219,7 +268,16 @@ CREATE TABLE video_tasks (
             'checking',
             'completed',
             'failed',
-            'exported'
+            'exported',
+            'waiting_storyboard_confirmation',
+            'keyframe_configuring',
+            'image_generating',
+            'waiting_image_confirmation',
+            'video_clip_generating',
+            'waiting_video_clip_confirmation',
+            'waiting_final_review',
+            'repairing',
+            'cancelled'
         )
     ),
     CONSTRAINT chk_video_tasks_progress CHECK (progress >= 0 AND progress <= 100),
@@ -234,7 +292,19 @@ CREATE TABLE video_tasks (
             'tutorial'
         )
     ),
-    CONSTRAINT chk_video_tasks_retry_count CHECK (retry_count >= 0)
+    CONSTRAINT chk_video_tasks_retry_count CHECK (retry_count >= 0),
+    CONSTRAINT chk_video_tasks_task_mode CHECK (
+        task_mode IN (
+            'PRODUCT_CREATIVE',
+            'REFERENCE_STORYBOARD',
+            'USER_SCRIPT',
+            'CUSTOM_STORYBOARD'
+        )
+    ),
+    CONSTRAINT chk_video_tasks_shot_count CHECK (
+        shot_count IS NULL OR shot_count > 0
+    ),
+    CONSTRAINT chk_video_tasks_current_version CHECK (current_version >= 1)
 );
 
 CREATE INDEX idx_video_tasks_user_id ON video_tasks(user_id);
@@ -556,7 +626,329 @@ CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens(user_id);
 CREATE INDEX idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);
 
 -- ============================================================
--- 16. V2+ EXTENSION TABLES
+-- 16. FASHION CREATIVE LOOP EXTENSION (video_tasks ALTER)
+-- ============================================================
+
+-- video_tasks extended columns for Fashion Creative Loop V1:
+-- ALTER TABLE video_tasks
+--     ADD COLUMN task_mode VARCHAR(80) NOT NULL DEFAULT 'PRODUCT_CREATIVE',
+--     ADD COLUMN product_category VARCHAR(80) NOT NULL DEFAULT 'general',
+--     ADD COLUMN shot_count INT,
+--     ADD COLUMN current_version INT NOT NULL DEFAULT 1,
+--     ADD CONSTRAINT chk_video_tasks_task_mode CHECK (
+--         task_mode IN ('PRODUCT_CREATIVE', 'REFERENCE_STORYBOARD', 'USER_SCRIPT', 'CUSTOM_STORYBOARD')
+--     ),
+--     ADD CONSTRAINT chk_video_tasks_shot_count CHECK (
+--         shot_count IS NULL OR shot_count > 0
+--     ),
+--     ADD CONSTRAINT chk_video_tasks_current_version CHECK (current_version >= 1);
+
+-- Also extend the status CHECK to include fashion creative loop statuses:
+-- ALTER TABLE video_tasks DROP CONSTRAINT chk_video_tasks_status;
+-- ALTER TABLE video_tasks ADD CONSTRAINT chk_video_tasks_status CHECK (
+--     status IN (
+--         'draft', 'asset_uploading', 'asset_analyzing',
+--         'waiting_asset_confirmation', 'reference_analyzing',
+--         'plan_generating', 'analyzing', 'analysis_completed',
+--         'plan_generated', 'waiting_plan_selection',
+--         'storyboard_generating', 'script_generating', 'script_generated',
+--         'material_generating', 'material_generated', 'rendering', 'checking',
+--         'completed', 'failed', 'exported',
+--         -- Fashion Creative Loop:
+--         'waiting_storyboard_confirmation', 'keyframe_configuring',
+--         'image_generating', 'waiting_image_confirmation',
+--         'video_clip_generating', 'waiting_video_clip_confirmation',
+--         'waiting_final_review', 'repairing', 'cancelled'
+--     )
+-- );
+
+-- ============================================================
+-- 17. TASK ASSETS (Fashion Creative Loop)
+-- ============================================================
+
+CREATE TABLE task_assets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    task_id UUID NOT NULL REFERENCES video_tasks(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    product_id UUID REFERENCES products(id) ON DELETE SET NULL,
+
+    asset_kind VARCHAR(50) NOT NULL,
+    asset_role VARCHAR(80) NOT NULL,
+    source VARCHAR(80) NOT NULL,
+    url TEXT NOT NULL,
+    file_name VARCHAR(255),
+    mime_type VARCHAR(100),
+    size_bytes BIGINT,
+    description TEXT,
+    confirmed BOOLEAN NOT NULL DEFAULT FALSE,
+
+    metadata JSONB,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT chk_task_assets_type CHECK (
+        asset_kind IN ('image', 'video', 'audio')
+    ),
+    CONSTRAINT chk_task_assets_role CHECK (
+        asset_role IN (
+            'product_front',
+            'product_back',
+            'product_detail',
+            'model_reference',
+            'scene_reference',
+            'outfit_reference',
+            'reference_video',
+            'user_keyframe',
+            'generated_result',
+            'ai_keyframe',
+            'image_variant',
+            'video_clip',
+            'final_video',
+            'cover_image'
+        )
+    ),
+    CONSTRAINT chk_task_assets_source CHECK (
+        source IN ('user_upload', 'ai_generated', 'external_url')
+    )
+);
+
+CREATE INDEX idx_task_assets_task_id ON task_assets(task_id);
+CREATE INDEX idx_task_assets_user_id ON task_assets(user_id);
+CREATE INDEX idx_task_assets_product_id ON task_assets(product_id);
+CREATE INDEX idx_task_assets_role ON task_assets(asset_role);
+
+-- ============================================================
+-- 18. CREATIVE STATES (Fashion Creative Loop)
+-- ============================================================
+
+CREATE TABLE creative_states (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    task_id UUID NOT NULL REFERENCES video_tasks(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+    product_json JSONB,
+    model_json JSONB,
+    scene_json JSONB,
+    outfit_json JSONB,
+    reference_video_json JSONB,
+    constraints_json JSONB,
+    user_requirements_json JSONB,
+
+    version INT NOT NULL DEFAULT 1,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT chk_creative_states_version CHECK (version >= 1)
+);
+
+CREATE UNIQUE INDEX uq_creative_states_task_id ON creative_states(task_id);
+
+-- ============================================================
+-- 19. KEYFRAMES (Fashion Creative Loop)
+-- ============================================================
+
+CREATE TABLE keyframes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    task_id UUID NOT NULL REFERENCES video_tasks(id) ON DELETE CASCADE,
+    storyboard_id UUID REFERENCES storyboards(id) ON DELETE CASCADE,
+    shot_id UUID REFERENCES storyboard_shots(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+    shot_no INT NOT NULL,
+    source VARCHAR(50) NOT NULL DEFAULT 'ai_generated',
+    asset_id UUID REFERENCES task_assets(id) ON DELETE SET NULL,
+    material_id UUID REFERENCES materials(id) ON DELETE SET NULL,
+    image_purpose VARCHAR(80) NOT NULL DEFAULT 'first_frame',
+    url TEXT,
+    prompt TEXT,
+    negative_prompt TEXT,
+    user_instruction TEXT,
+    provider VARCHAR(100),
+    model_name VARCHAR(100),
+
+    status VARCHAR(50) NOT NULL DEFAULT 'draft',
+
+    version INT NOT NULL DEFAULT 1,
+    error_message TEXT,
+    metadata JSONB,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT chk_keyframes_source CHECK (
+        source IN ('user_upload', 'existing_asset', 'ai_generated')
+    ),
+    CONSTRAINT chk_keyframes_image_purpose CHECK (
+        image_purpose IN ('first_frame', 'last_frame', 'reference', 'product_detail')
+    ),
+    CONSTRAINT chk_keyframes_status CHECK (
+        status IN ('draft', 'generating', 'generated', 'uploaded', 'confirmed', 'rejected', 'failed')
+    ),
+    CONSTRAINT chk_keyframes_version CHECK (version >= 1)
+);
+
+CREATE INDEX idx_keyframes_task_id ON keyframes(task_id);
+CREATE INDEX idx_keyframes_storyboard_id ON keyframes(storyboard_id);
+CREATE INDEX idx_keyframes_shot_id ON keyframes(shot_id);
+CREATE INDEX idx_keyframes_user_id ON keyframes(user_id);
+CREATE INDEX idx_keyframes_status ON keyframes(status);
+CREATE UNIQUE INDEX uq_keyframes_task_shot_version
+    ON keyframes(task_id, shot_no, version);
+
+-- ============================================================
+-- 20. VIDEO CLIPS (Fashion Creative Loop)
+-- ============================================================
+
+CREATE TABLE video_clips (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    task_id UUID NOT NULL REFERENCES video_tasks(id) ON DELETE CASCADE,
+    storyboard_id UUID REFERENCES storyboards(id) ON DELETE CASCADE,
+    shot_id UUID REFERENCES storyboard_shots(id) ON DELETE CASCADE,
+    keyframe_id UUID REFERENCES keyframes(id) ON DELETE SET NULL,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+    shot_no INT NOT NULL,
+    source VARCHAR(50) NOT NULL DEFAULT 'ai_generated',
+    url TEXT,
+    prompt TEXT,
+    negative_prompt TEXT,
+    provider VARCHAR(100),
+    model_name VARCHAR(100),
+
+    status VARCHAR(50) NOT NULL DEFAULT 'draft',
+    duration INT NOT NULL,
+
+    version INT NOT NULL DEFAULT 1,
+    error_message TEXT,
+    metadata JSONB,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT chk_video_clips_source CHECK (
+        source IN ('user_upload', 'ai_generated')
+    ),
+    CONSTRAINT chk_video_clips_status CHECK (
+        status IN ('draft', 'generating', 'generated', 'uploaded', 'confirmed', 'rejected', 'failed')
+    ),
+    CONSTRAINT chk_video_clips_version CHECK (version >= 1),
+    CONSTRAINT chk_video_clips_duration CHECK (
+        duration > 0
+    )
+);
+
+CREATE INDEX idx_video_clips_task_id ON video_clips(task_id);
+CREATE INDEX idx_video_clips_storyboard_id ON video_clips(storyboard_id);
+CREATE INDEX idx_video_clips_shot_id ON video_clips(shot_id);
+CREATE INDEX idx_video_clips_keyframe_id ON video_clips(keyframe_id);
+CREATE INDEX idx_video_clips_user_id ON video_clips(user_id);
+CREATE INDEX idx_video_clips_status ON video_clips(status);
+CREATE UNIQUE INDEX uq_video_clips_task_shot_version
+    ON video_clips(task_id, shot_no, version);
+
+-- ============================================================
+-- 21. REPAIR EVENTS (Fashion Creative Loop)
+-- ============================================================
+
+CREATE TABLE repair_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    task_id UUID NOT NULL REFERENCES video_tasks(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+    target_type VARCHAR(80) NOT NULL,
+    target_id VARCHAR(100),
+    user_feedback TEXT NOT NULL,
+    issue_type VARCHAR(100),
+    repair_scope JSONB,
+    repair_plan JSONB,
+    before_version INT,
+    after_version INT,
+
+    status VARCHAR(50) NOT NULL DEFAULT 'created',
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT chk_repair_events_target_type CHECK (
+        target_type IN ('storyboard', 'keyframe', 'video_clip', 'render_manifest', 'final_video', 'plan')
+    ),
+    CONSTRAINT chk_repair_events_status CHECK (
+        status IN ('created', 'in_progress', 'completed', 'failed')
+    )
+);
+
+CREATE INDEX idx_repair_events_task_id ON repair_events(task_id);
+CREATE INDEX idx_repair_events_user_id ON repair_events(user_id);
+CREATE INDEX idx_repair_events_status ON repair_events(status);
+
+-- ============================================================
+-- 22. VIDEO FINGERPRINTS (Fashion Creative Loop)
+-- ============================================================
+
+CREATE TABLE video_fingerprints (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    task_id UUID NOT NULL REFERENCES video_tasks(id) ON DELETE CASCADE,
+    product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+    opening_type VARCHAR(120),
+    main_action VARCHAR(120),
+    ending_type VARCHAR(120),
+    main_visual VARCHAR(120),
+    shot_sequence JSONB,
+    camera_sequence JSONB,
+    scene_position JSONB,
+    similarity_score INT,
+    compared_with JSONB,
+    raw_fingerprint JSONB,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT chk_video_fingerprints_similarity_score CHECK (
+        similarity_score IS NULL OR (similarity_score >= 0 AND similarity_score <= 100)
+    )
+);
+
+CREATE INDEX idx_video_fingerprints_task_id ON video_fingerprints(task_id);
+CREATE INDEX idx_video_fingerprints_product_id ON video_fingerprints(product_id);
+CREATE INDEX idx_video_fingerprints_user_id ON video_fingerprints(user_id);
+
+-- ============================================================
+-- 23. QA RESULTS (Fashion Creative Loop)
+-- ============================================================
+
+CREATE TABLE qa_results (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    task_id UUID NOT NULL REFERENCES video_tasks(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+    target_type VARCHAR(80) NOT NULL,
+    target_id VARCHAR(100),
+    score INT,
+    passed BOOLEAN NOT NULL DEFAULT FALSE,
+    issues JSONB,
+    suggestions JSONB,
+    repair_instruction TEXT,
+    raw_ai_output JSONB,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT chk_qa_results_score CHECK (
+        score IS NULL OR (score >= 0 AND score <= 100)
+    ),
+    CONSTRAINT chk_qa_results_target_type CHECK (
+        target_type IN ('storyboard', 'keyframe', 'video_clip', 'plan', 'final_video')
+    )
+);
+
+CREATE INDEX idx_qa_results_task_id ON qa_results(task_id);
+CREATE INDEX idx_qa_results_user_id ON qa_results(user_id);
+CREATE INDEX idx_qa_results_target_type ON qa_results(target_type);
+
+-- ============================================================
+-- 24. V2+ EXTENSION TABLES
 -- These tables can be created later when V2/V3/V4 starts.
 -- Recommendation:
 -- Keep V1 production migrations limited to sections 1-15.

@@ -260,6 +260,402 @@ export interface paths {
       };
     };
   };
+  "/api/video-tasks/{taskId}/assets": {
+    /** List task assets */
+    get: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+        };
+      };
+      responses: {
+        /** @description Asset list */
+        200: {
+          content: {
+            "application/json": components["schemas"]["TaskAssetListResponse"];
+          };
+        };
+      };
+    };
+    /** Add asset to task */
+    post: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["CreateAssetRequest"];
+        };
+      };
+      responses: {
+        /** @description Asset created */
+        200: {
+          content: {
+            "application/json": components["schemas"]["TaskAssetListResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/video-tasks/{taskId}/assets/{assetId}/role": {
+    /** Update asset role */
+    patch: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+          assetId: string;
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["UpdateAssetRoleRequest"];
+        };
+      };
+      responses: {
+        /** @description Role updated */
+        200: {
+          content: {
+            "application/json": components["schemas"]["TaskAssetListResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/video-tasks/{taskId}/assets/confirm": {
+    /** Confirm assets */
+    post: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["ConfirmAssetsRequest"];
+        };
+      };
+      responses: {
+        /** @description Assets confirmed */
+        200: {
+          content: {
+            "application/json": components["schemas"]["VideoTaskStatusResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/video-tasks/{taskId}/creative-state": {
+    /** Get creative state */
+    get: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+        };
+      };
+      responses: {
+        /** @description Creative state */
+        200: {
+          content: {
+            "application/json": components["schemas"]["CreativeStateResponse"];
+          };
+        };
+      };
+    };
+    /** Update creative state */
+    patch: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["UpdateCreativeStateRequest"];
+        };
+      };
+      responses: {
+        /** @description Creative state updated */
+        200: {
+          content: {
+            "application/json": components["schemas"]["CreativeStateResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/video-tasks/{taskId}/confirm-plan": {
+    /** Confirm video plan and proceed to storyboard generation */
+    post: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["ConfirmPlanRequest"];
+        };
+      };
+      responses: {
+        /** @description Plan confirmed */
+        200: {
+          content: {
+            "application/json": components["schemas"]["VideoTaskStatusResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/video-tasks/{taskId}/confirm-storyboard": {
+    /** Confirm storyboard and proceed to keyframe configuration */
+    post: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+        };
+      };
+      responses: {
+        /** @description Storyboard confirmed */
+        200: {
+          content: {
+            "application/json": components["schemas"]["VideoTaskStatusResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/video-tasks/{taskId}/keyframes": {
+    /** List keyframes */
+    get: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+        };
+      };
+      responses: {
+        /** @description Keyframe list */
+        200: {
+          content: {
+            "application/json": components["schemas"]["KeyframeListResponse"];
+          };
+        };
+      };
+    };
+    /** Add keyframe (user upload or AI request) */
+    post: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["CreateKeyframeRequest"];
+        };
+      };
+      responses: {
+        /** @description Keyframe created */
+        200: {
+          content: {
+            "application/json": components["schemas"]["KeyframeListResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/video-tasks/{taskId}/keyframes/{keyframeId}/confirm": {
+    /** Confirm a keyframe */
+    post: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+          keyframeId: string;
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["ConfirmKeyframeRequest"];
+        };
+      };
+      responses: {
+        /** @description Keyframe confirmed */
+        200: {
+          content: {
+            "application/json": components["schemas"]["VideoTaskStatusResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/video-tasks/{taskId}/keyframes/{keyframeId}/reject": {
+    /** Reject a keyframe */
+    post: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+          keyframeId: string;
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["ConfirmKeyframeRequest"];
+        };
+      };
+      responses: {
+        /** @description Keyframe rejected */
+        200: {
+          content: {
+            "application/json": components["schemas"]["VideoTaskStatusResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/video-tasks/{taskId}/video-clips": {
+    /** List video clips */
+    get: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+        };
+      };
+      responses: {
+        /** @description Video clip list */
+        200: {
+          content: {
+            "application/json": components["schemas"]["VideoClipListResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/video-tasks/{taskId}/video-clips/{clipId}/confirm": {
+    /** Confirm a video clip */
+    post: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+          clipId: string;
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["ConfirmVideoClipRequest"];
+        };
+      };
+      responses: {
+        /** @description Clip confirmed */
+        200: {
+          content: {
+            "application/json": components["schemas"]["VideoTaskStatusResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/video-tasks/{taskId}/video-clips/{clipId}/reject": {
+    /** Reject a video clip */
+    post: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+          clipId: string;
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["ConfirmVideoClipRequest"];
+        };
+      };
+      responses: {
+        /** @description Clip rejected */
+        200: {
+          content: {
+            "application/json": components["schemas"]["VideoTaskStatusResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/video-tasks/{taskId}/render": {
+    /** Request video render from confirmed clips */
+    post: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+        };
+      };
+      responses: {
+        /** @description Render requested */
+        200: {
+          content: {
+            "application/json": components["schemas"]["VideoTaskStatusResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/video-tasks/{taskId}/approve": {
+    /** Approve final video review */
+    post: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+        };
+      };
+      responses: {
+        /** @description Final video approved */
+        200: {
+          content: {
+            "application/json": components["schemas"]["VideoTaskStatusResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/video-tasks/{taskId}/feedback": {
+    /** Submit feedback for repair */
+    post: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["FeedbackRequest"];
+        };
+      };
+      responses: {
+        /** @description Feedback received */
+        200: {
+          content: {
+            "application/json": components["schemas"]["RepairEventListResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/video-tasks/{taskId}/repair-events": {
+    /** List repair events for a task */
+    get: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+        };
+      };
+      responses: {
+        /** @description Repair event list */
+        200: {
+          content: {
+            "application/json": components["schemas"]["RepairEventListResponse"];
+          };
+        };
+      };
+    };
+  };
   "/api/video-tasks/{taskId}/storyboard": {
     /** Get storyboard by task */
     get: {
@@ -515,6 +911,49 @@ export interface paths {
       };
     };
   };
+  "/api/admin/quotas": {
+    /** Admin list user quotas */
+    get: {
+      parameters: {
+        query?: {
+          page?: number;
+          pageSize?: number;
+          status?: string;
+        };
+      };
+      responses: {
+        /** @description Admin quota list */
+        200: {
+          content: {
+            "application/json": components["schemas"]["AdminQuotaListResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/admin/quotas/{userId}": {
+    /** Admin update user quota limits */
+    patch: {
+      parameters: {
+        path: {
+          userId: string;
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["AdminQuotaUpdateRequest"];
+        };
+      };
+      responses: {
+        /** @description Updated user quota */
+        200: {
+          content: {
+            "application/json": components["schemas"]["AdminQuotaDetailResponse"];
+          };
+        };
+      };
+    };
+  };
 }
 
 export type webhooks = Record<string, never>;
@@ -544,9 +983,11 @@ export interface components {
       totalPages?: number;
     };
     /** @enum {string} */
-    VideoType: "pain_point_solution" | "before_after" | "review";
+    VideoType: "pain_point_solution" | "before_after" | "review" | "product_showcase" | "ugc_style" | "tutorial";
     /** @enum {string} */
-    VideoTaskStatus: "draft" | "analyzing" | "analysis_completed" | "plan_generated" | "waiting_plan_selection" | "script_generating" | "script_generated" | "material_generating" | "material_generated" | "rendering" | "checking" | "completed" | "failed" | "exported";
+    VideoTaskStatus: "draft" | "asset_uploading" | "asset_analyzing" | "waiting_asset_confirmation" | "reference_analyzing" | "plan_generating" | "analyzing" | "analysis_completed" | "plan_generated" | "waiting_plan_selection" | "storyboard_generating" | "script_generating" | "script_generated" | "material_generating" | "material_generated" | "rendering" | "checking" | "completed" | "failed" | "exported" | "waiting_storyboard_confirmation" | "keyframe_configuring" | "image_generating" | "waiting_image_confirmation" | "video_clip_generating" | "waiting_video_clip_confirmation" | "waiting_final_review" | "repairing" | "cancelled";
+    /** @enum {string} */
+    TaskMode: "PRODUCT_CREATIVE" | "REFERENCE_STORYBOARD" | "USER_SCRIPT" | "CUSTOM_STORYBOARD";
     /** @enum {string} */
     VideoStatus: "completed" | "exported" | "deleted";
     RegisterRequest: {
@@ -640,6 +1081,9 @@ export interface components {
       needSubtitles?: boolean;
       /** @default false */
       needVoiceover?: boolean;
+      taskMode?: components["schemas"]["TaskMode"];
+      productCategory?: string | null;
+      shotCount?: number | null;
     };
     CreateVideoTaskResponse: {
       code?: number;
@@ -664,6 +1108,10 @@ export interface components {
       needVoiceover?: boolean;
       /** Format: uuid */
       selectedPlanId?: string | null;
+      taskMode?: components["schemas"]["TaskMode"];
+      productCategory?: string | null;
+      shotCount?: number | null;
+      currentVersion?: number;
       errorMessage?: string | null;
       errorCode?: string | null;
       failedStage?: string | null;
@@ -831,6 +1279,11 @@ export interface components {
         usedImageCount?: number;
         usedVideoClipCount?: number;
         usedExportCount?: number;
+        /**
+         * Format: date
+         * @description Natural day for the current usage counters. Usage resets when this date changes.
+         */
+        quotaDate?: string;
       };
     };
     AiCallbackRequest: {
@@ -839,16 +1292,22 @@ export interface components {
       /** @example 1.0.0 */
       schemaVersion: string;
       /** @enum {string} */
-      stage: "product_analysis" | "video_plan" | "storyboard" | "material" | "quality_check" | "render_manifest";
+      stage: "asset_analysis" | "reference_analysis" | "creative_plan" | "product_analysis" | "video_plan" | "storyboard" | "material" | "quality_check" | "render_manifest" | "keyframe" | "video_clip" | "qa" | "repair";
       /** @enum {string} */
       status: "success" | "failed";
       nextTaskStatus?: components["schemas"]["VideoTaskStatus"];
+      fashionAssetAnalysis?: Record<string, unknown> | null;
+      referenceAnalysis?: Record<string, unknown> | null;
       productAnalysis?: Record<string, unknown> | null;
       plans?: Record<string, never>[] | null;
       storyboard?: Record<string, unknown> | null;
       materials?: Record<string, never>[] | null;
       renderManifest?: Record<string, unknown> | null;
       qualityCheck?: Record<string, unknown> | null;
+      keyframes?: Record<string, never>[] | null;
+      clips?: Record<string, never>[] | null;
+      qaResult?: Record<string, unknown> | null;
+      repairResult?: Record<string, unknown> | null;
       error?: components["schemas"]["ErrorDetail"] | null;
     };
     RenderCallbackRequest: {
@@ -927,6 +1386,321 @@ export interface components {
         total?: number;
         totalPages?: number;
       };
+    };
+    AdminQuotaItem: {
+      /** Format: uuid */
+      userId?: string;
+      /** Format: email */
+      email?: string;
+      role?: string;
+      status?: string;
+      videoQuota?: number;
+      imageQuota?: number;
+      videoClipQuota?: number;
+      exportQuota?: number;
+      usedVideoCount?: number;
+      usedImageCount?: number;
+      usedVideoClipCount?: number;
+      usedExportCount?: number;
+      /** Format: date */
+      quotaDate?: string;
+      /** Format: date-time */
+      createdAt?: string;
+      /** Format: date-time */
+      updatedAt?: string;
+    };
+    AdminQuotaUpdateRequest: {
+      videoQuota?: number;
+      imageQuota?: number;
+      videoClipQuota?: number;
+      exportQuota?: number;
+    };
+    AdminQuotaListResponse: {
+      code?: number;
+      message?: string;
+      data?: {
+        items?: components["schemas"]["AdminQuotaItem"][];
+        page?: number;
+        pageSize?: number;
+        total?: number;
+        totalPages?: number;
+      };
+    };
+    AdminQuotaDetailResponse: {
+      code?: number;
+      message?: string;
+      data?: components["schemas"]["AdminQuotaItem"];
+    };
+    TaskAsset: {
+      /** Format: uuid */
+      assetId?: string;
+      /** Format: uuid */
+      taskId?: string;
+      /** Format: uuid */
+      productId?: string | null;
+      /** Format: uuid */
+      shotId?: string | null;
+      /** @enum {string} */
+      assetKind?: "image" | "video" | "audio";
+      url?: string;
+      /** @enum {string} */
+      assetRole?: "product_front" | "product_back" | "product_detail" | "model_reference" | "scene_reference" | "outfit_reference" | "reference_video" | "user_keyframe" | "generated_result" | "ai_keyframe" | "image_variant" | "video_clip" | "final_video" | "cover_image";
+      /** @enum {string} */
+      source?: "user_upload" | "ai_generated" | "external_url";
+      fileName?: string | null;
+      mimeType?: string | null;
+      sizeBytes?: number | null;
+      description?: string | null;
+      metadata?: Record<string, unknown> | null;
+      confirmed?: boolean;
+      /** Format: date-time */
+      createdAt?: string;
+      /** Format: date-time */
+      updatedAt?: string;
+    };
+    CreativeState: {
+      /** Format: uuid */
+      creativeStateId?: string;
+      /** Format: uuid */
+      taskId?: string;
+      product?: Record<string, unknown> | null;
+      model?: Record<string, unknown> | null;
+      scene?: Record<string, unknown> | null;
+      outfit?: Record<string, unknown> | null;
+      referenceVideo?: Record<string, unknown> | null;
+      constraints?: Record<string, unknown> | null;
+      userRequirements?: Record<string, unknown> | null;
+      version?: number;
+      /** Format: date-time */
+      createdAt?: string;
+      /** Format: date-time */
+      updatedAt?: string;
+    };
+    Keyframe: {
+      /** Format: uuid */
+      keyframeId?: string;
+      /** Format: uuid */
+      taskId?: string;
+      /** Format: uuid */
+      shotId?: string;
+      shotNo?: number;
+      /** @enum {string} */
+      source?: "user_upload" | "existing_asset" | "ai_generated";
+      /** Format: uuid */
+      assetId?: string | null;
+      /** Format: uuid */
+      materialId?: string | null;
+      /** @enum {string} */
+      imagePurpose?: "first_frame" | "last_frame" | "reference" | "product_detail";
+      url?: string | null;
+      prompt?: string | null;
+      negativePrompt?: string | null;
+      provider?: string | null;
+      modelName?: string | null;
+      /** @enum {string} */
+      status?: "draft" | "generating" | "generated" | "uploaded" | "confirmed" | "rejected" | "failed";
+      userInstruction?: string | null;
+      version?: number;
+      errorMessage?: string | null;
+      /** Format: date-time */
+      createdAt?: string;
+      /** Format: date-time */
+      updatedAt?: string;
+    };
+    KeyframeListResponse: {
+      code?: number;
+      message?: string;
+      data?: {
+        /** Format: uuid */
+        taskId?: string;
+        keyframes?: components["schemas"]["Keyframe"][];
+      };
+    };
+    ConfirmKeyframeRequest: {
+      confirmed: boolean;
+      feedback?: string;
+    };
+    VideoClip: {
+      /** Format: uuid */
+      clipId?: string;
+      /** Format: uuid */
+      taskId?: string;
+      /** Format: uuid */
+      shotId?: string;
+      /** Format: uuid */
+      keyframeId?: string | null;
+      shotNo?: number;
+      /** @enum {string} */
+      source?: "user_upload" | "ai_generated";
+      url?: string | null;
+      prompt?: string | null;
+      negativePrompt?: string | null;
+      provider?: string | null;
+      modelName?: string | null;
+      /** @enum {string} */
+      status?: "draft" | "generating" | "generated" | "uploaded" | "confirmed" | "rejected" | "failed";
+      duration?: number;
+      version?: number;
+      errorMessage?: string | null;
+      /** Format: date-time */
+      createdAt?: string;
+      /** Format: date-time */
+      updatedAt?: string;
+    };
+    VideoClipListResponse: {
+      code?: number;
+      message?: string;
+      data?: {
+        /** Format: uuid */
+        taskId?: string;
+        clips?: components["schemas"]["VideoClip"][];
+      };
+    };
+    ConfirmVideoClipRequest: {
+      confirmed: boolean;
+      feedback?: string;
+    };
+    RepairEvent: {
+      /** Format: uuid */
+      repairEventId?: string;
+      /** Format: uuid */
+      taskId?: string;
+      /** @enum {string} */
+      targetType?: "storyboard" | "keyframe" | "video_clip" | "render_manifest" | "final_video" | "plan";
+      targetId?: string | null;
+      userFeedback?: string;
+      issueType?: string | null;
+      repairScope?: Record<string, unknown> | null;
+      repairPlan?: Record<string, unknown> | null;
+      beforeVersion?: number | null;
+      afterVersion?: number | null;
+      /** @enum {string} */
+      status?: "created" | "in_progress" | "completed" | "failed";
+      /** Format: date-time */
+      createdAt?: string;
+      /** Format: date-time */
+      updatedAt?: string;
+    };
+    RepairEventListResponse: {
+      code?: number;
+      message?: string;
+      data?: {
+        /** Format: uuid */
+        taskId?: string;
+        events?: components["schemas"]["RepairEvent"][];
+      };
+    };
+    FeedbackRequest: {
+      feedbackText: string;
+      category?: string;
+    };
+    QaResult: {
+      /** Format: uuid */
+      qaResultId?: string;
+      /** Format: uuid */
+      taskId?: string;
+      /** Format: uuid */
+      userId?: string;
+      /** @enum {string} */
+      targetType?: "storyboard" | "keyframe" | "video_clip" | "plan" | "final_video";
+      targetId?: string | null;
+      score?: number | null;
+      passed?: boolean;
+      issues?: Record<string, unknown> | null;
+      suggestions?: string[] | null;
+      repairInstruction?: string | null;
+      rawAiOutput?: Record<string, unknown> | null;
+      /** Format: date-time */
+      createdAt?: string;
+    };
+    VideoFingerprint: {
+      /** Format: uuid */
+      fingerprintId?: string;
+      /** Format: uuid */
+      taskId?: string;
+      /** Format: uuid */
+      productId?: string | null;
+      /** Format: uuid */
+      userId?: string;
+      openingType?: string | null;
+      mainAction?: string | null;
+      endingType?: string | null;
+      mainVisual?: string | null;
+      shotSequence?: Record<string, unknown> | null;
+      cameraSequence?: Record<string, unknown> | null;
+      scenePosition?: Record<string, unknown> | null;
+      similarityScore?: number | null;
+      comparedWith?: Record<string, unknown> | null;
+      rawFingerprint?: Record<string, unknown> | null;
+      /** Format: date-time */
+      createdAt?: string;
+    };
+    CreativeStateResponse: {
+      code?: number;
+      message?: string;
+      data?: components["schemas"]["CreativeState"];
+    };
+    UpdateCreativeStateRequest: {
+      product?: Record<string, never>;
+      model?: Record<string, never>;
+      scene?: Record<string, never>;
+      outfit?: Record<string, never>;
+      referenceVideo?: Record<string, never>;
+      constraints?: Record<string, never>;
+      userRequirements?: Record<string, never>;
+    };
+    TaskAssetListResponse: {
+      code?: number;
+      message?: string;
+      data?: {
+        /** Format: uuid */
+        taskId?: string;
+        assets?: components["schemas"]["TaskAsset"][];
+      };
+    };
+    UpdateAssetRoleRequest: {
+      /** @enum {string} */
+      role: "product_front" | "product_back" | "product_detail" | "model_reference" | "scene_reference" | "outfit_reference" | "reference_video" | "user_keyframe" | "generated_result" | "ai_keyframe" | "image_variant" | "video_clip" | "final_video" | "cover_image";
+      /** Format: uuid */
+      shotId?: string | null;
+    };
+    ConfirmAssetsRequest: {
+      assetIds?: string[];
+    };
+    ConfirmPlanRequest: {
+      /** Format: uuid */
+      planId: string;
+    };
+    CreateAssetRequest: {
+      /** @enum {string} */
+      assetKind: "image" | "video" | "audio";
+      assetRole: string;
+      url: string;
+      /** @enum {string} */
+      source: "user_upload" | "ai_generated" | "external_url";
+      fileName?: string | null;
+      mimeType?: string | null;
+      sizeBytes?: number | null;
+      description?: string | null;
+      metadata?: Record<string, unknown> | null;
+    };
+    CreateKeyframeRequest: {
+      shotNo: number;
+      /**
+       * @default user_upload
+       * @enum {string}
+       */
+      source?: "user_upload" | "existing_asset" | "ai_generated";
+      /** Format: uuid */
+      assetId?: string | null;
+      /**
+       * @default first_frame
+       * @enum {string}
+       */
+      imagePurpose?: "first_frame" | "last_frame" | "reference" | "product_detail";
+      url?: string | null;
+      prompt?: string | null;
+      userInstruction?: string | null;
     };
   };
   responses: never;

@@ -5,8 +5,13 @@ import com.tk.ai.video.common.ResourceNotFoundException;
 import com.tk.ai.video.module.product.mapper.ProductImageMapper;
 import com.tk.ai.video.module.product.mapper.ProductMapper;
 import com.tk.ai.video.module.quota.service.QuotaService;
+import com.tk.ai.video.module.callback.service.impl.RenderMessageProducer;
+import com.tk.ai.video.module.keyframe.mapper.KeyframeMapper;
+import com.tk.ai.video.module.repairevent.mapper.RepairEventMapper;
 import com.tk.ai.video.module.storyboard.entity.VideoPlanEntity;
 import com.tk.ai.video.module.storyboard.mapper.VideoPlanMapper;
+import com.tk.ai.video.module.videoclip.mapper.VideoClipMapper;
+import com.tk.ai.video.module.videotask.dto.ConfirmPlanRequest;
 import com.tk.ai.video.module.videotask.dto.SelectPlanRequest;
 import com.tk.ai.video.module.videotask.entity.VideoTaskEntity;
 import com.tk.ai.video.module.videotask.mapper.VideoTaskMapper;
@@ -46,6 +51,14 @@ class VideoTaskServiceImplTest {
     private QuotaService quotaService;
     @Mock
     private AiServiceClient aiServiceClient;
+    @Mock
+    private KeyframeMapper keyframeMapper;
+    @Mock
+    private VideoClipMapper videoClipMapper;
+    @Mock
+    private RepairEventMapper repairEventMapper;
+    @Mock
+    private RenderMessageProducer renderMessageProducer;
 
     @InjectMocks
     private VideoTaskServiceImpl service;
@@ -130,6 +143,55 @@ class VideoTaskServiceImplTest {
 
         verify(aiServiceClient, never()).startSelectedPlanGeneration(
                 any(), any(), any(), any(), any(), anyInt(), any(), anyBoolean(), anyBoolean()
+        );
+    }
+
+    @Test
+    void confirmPlanPersistsSelectedPlanAndStartsStoryboardGeneration() {
+        UUID taskId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+
+        VideoTaskEntity task = new VideoTaskEntity();
+        task.setId(taskId);
+        task.setUserId(userId);
+        task.setProductId(productId);
+        task.setStatus("waiting_plan_selection");
+        task.setDuration(20);
+        task.setVideoType("product_showcase");
+
+        VideoPlanEntity plan = new VideoPlanEntity();
+        plan.setId(planId);
+        plan.setTaskId(taskId);
+        plan.setUserId(userId);
+        plan.setProductId(productId);
+        plan.setType("product_showcase");
+        plan.setTitle("Fashion plan");
+        plan.setHook("Hook");
+        plan.setStructure("Hook -> Try-on -> CTA");
+        plan.setReason("Strong product detail flow");
+        plan.setEstimatedDuration(20);
+        plan.setScore(90);
+
+        ConfirmPlanRequest request = new ConfirmPlanRequest();
+        request.setPlanId(planId);
+
+        when(videoTaskMapper.selectById(taskId)).thenReturn(task);
+        when(videoPlanMapper.findOwnedPlan(planId, taskId, userId)).thenReturn(Optional.of(plan));
+
+        service.confirmPlan(taskId, request, userId);
+
+        assertThat(task.getSelectedPlanId()).isEqualTo(planId);
+        assertThat(task.getStatus()).isEqualTo("storyboard_generating");
+        verify(aiServiceClient).startStoryboardGeneration(
+                eq(taskId),
+                eq(productId),
+                eq(userId),
+                eq(planId),
+                any(),
+                eq(20),
+                eq("product_showcase")
         );
     }
 }

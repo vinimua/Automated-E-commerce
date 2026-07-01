@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import {
   Activity,
   ArrowLeft,
+  BarChart3,
   FileText,
   Film,
   LayoutDashboard,
@@ -21,6 +22,7 @@ const adminLinks = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/video-tasks", label: "Tasks", icon: Video },
   { href: "/admin/videos", label: "Videos", icon: Film },
+  { href: "/admin/quotas", label: "Quotas", icon: BarChart3 },
   { href: "/admin/model-logs", label: "AI Logs", icon: FileText },
   { href: "/admin/render-logs", label: "Render Logs", icon: Activity },
 ];

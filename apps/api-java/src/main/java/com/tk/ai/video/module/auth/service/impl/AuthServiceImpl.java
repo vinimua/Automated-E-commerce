@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.HexFormat;
 import java.util.UUID;
@@ -64,6 +65,7 @@ public class AuthServiceImpl implements AuthService {
         quota.setUsedImageCount(0);
         quota.setUsedVideoClipCount(0);
         quota.setUsedExportCount(0);
+        quota.setQuotaDate(LocalDate.now());
         userQuotaMapper.insert(quota);
 
         log.info("User registered: userId={}, email={}", user.getId(), user.getEmail());

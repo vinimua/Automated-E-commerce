@@ -27,7 +27,7 @@ def build_callback_payload(
     **stage_data,
 ) -> dict:
     """Build a CallbackPayload dict for the callback_java activity."""
-    payload = {
+    payload = { 
         "taskId": task_id,
         "schemaVersion": "1.0.0",
         "stage": stage,

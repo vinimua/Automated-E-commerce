@@ -1,17 +1,21 @@
 "use client";
 
 import { apiRequest } from "@/lib/api-client";
-import type { Storyboard, StoryboardShot, UpdateStoryboardRequest } from "@/types/api";
+import type { Storyboard, StoryboardShot, UpdateStoryboardRequest, VideoTask } from "@/types/api";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Clock, Film, Type, Music, Hash, Save } from "lucide-react";
+import { Clock, Film, Type, Music, Hash, Save, CheckCircle, ArrowRight } from "lucide-react";
+import { CancelTaskButton } from "@/components/cancel-task-button";
 
 export default function StoryboardPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [storyboard, setStoryboard] = useState<Storyboard | null>(null);
+  const [taskStatus, setTaskStatus] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
@@ -25,18 +29,26 @@ export default function StoryboardPage() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await apiRequest<{ code: number; message: string; data: Storyboard }>(
-          `/api/video-tasks/${id}/storyboard`
-        );
-        if (res.code === 0 && res.data) {
-          setStoryboard(res.data);
-          setTitle(res.data.title || "");
-          setHook(res.data.hook || "");
-          setCoverText(res.data.coverText || "");
-          setCaption(res.data.caption || "");
-          setHashtagsStr((res.data.hashtags || []).join(", "));
+        const [sbRes, taskRes] = await Promise.all([
+          apiRequest<{ code: number; message: string; data: Storyboard }>(
+            `/api/video-tasks/${id}/storyboard`
+          ),
+          apiRequest<{ code: number; message: string; data: VideoTask }>(
+            `/api/video-tasks/${id}`
+          ),
+        ]);
+        if (sbRes.code === 0 && sbRes.data) {
+          setStoryboard(sbRes.data);
+          setTitle(sbRes.data.title || "");
+          setHook(sbRes.data.hook || "");
+          setCoverText(sbRes.data.coverText || "");
+          setCaption(sbRes.data.caption || "");
+          setHashtagsStr((sbRes.data.hashtags || []).join(", "));
         } else {
-          setError(res.message || "加载分镜失败");
+          setError(sbRes.message || "加载分镜失败");
+        }
+        if (taskRes.code === 0 && taskRes.data) {
+          setTaskStatus(taskRes.data.status);
         }
       } catch (e: any) {
         setError(e.message || "网络错误");
@@ -83,6 +95,26 @@ export default function StoryboardPage() {
     }
   }
 
+  async function handleConfirm() {
+    setConfirming(true);
+    setError("");
+    try {
+      const res = await apiRequest<{ code: number; message: string }>(
+        `/api/video-tasks/${id}/confirm-storyboard`,
+        { method: "POST" }
+      );
+      if (res.code === 0) {
+        router.push(`/video-tasks/${id}/keyframes`);
+      } else {
+        setError(res.message || "确认失败");
+      }
+    } catch (e: any) {
+      setError(e.message || "网络错误");
+    } finally {
+      setConfirming(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-96 items-center justify-center">
@@ -112,15 +144,35 @@ export default function StoryboardPage() {
           </Link>
           <h1 className="mt-2 text-2xl font-bold">分镜脚本编辑</h1>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
-          <Save className="h-4 w-4" />
-          {saving ? "保存中..." : "保存修改"}
-        </button>
+        <div className="flex items-center gap-3">
+          <CancelTaskButton taskId={id} />
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            <Save className="h-4 w-4" />
+            {saving ? "保存中..." : "保存修改"}
+          </button>
+          {taskStatus === "waiting_storyboard_confirmation" && (
+            <button
+              onClick={handleConfirm}
+              disabled={confirming}
+              className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+            >
+              <CheckCircle className="h-4 w-4" />
+              {confirming ? "确认中..." : "确认分镜，进入关键帧"}
+            </button>
+          )}
+        </div>
       </div>
+
+      {taskStatus === "waiting_storyboard_confirmation" && (
+        <div className="flex items-center gap-2 rounded-md border border-green-500/50 bg-green-50 p-4 text-sm text-green-700">
+          <CheckCircle className="h-5 w-5 shrink-0" />
+          <span>AI 分镜已生成。请检查并编辑分镜内容，确认无误后点击「确认分镜」进入关键帧配置。</span>
+        </div>
+      )}
 
       {successMsg && (
         <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">{successMsg}</div>

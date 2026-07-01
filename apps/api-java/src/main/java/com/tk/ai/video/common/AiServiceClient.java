@@ -128,4 +128,123 @@ public class AiServiceClient {
             // Fire-and-forget: task stays in current state until AI callback arrives.
         }
     }
+
+    // ── Fashion Creative Loop V1 dispatch methods ──
+
+    public void startAssetAnalysis(UUID taskId, UUID productId, UUID userId,
+                                   Map<String, Object> assetContext) {
+        String correlationId = getOrCreateCorrelationId();
+        Map<String, Object> payload = Map.of(
+                "taskId", taskId.toString(),
+                "productId", productId.toString(),
+                "userId", userId.toString(),
+                "correlationId", correlationId,
+                "assetContext", assetContext != null ? assetContext : Map.of()
+        );
+        fireAndForget("/ai/workflows/asset-analysis", payload, taskId, "AssetAnalysis");
+    }
+
+    public void startReferenceAnalysis(UUID taskId, UUID productId, UUID userId,
+                                        Map<String, Object> creativeState) {
+        String correlationId = getOrCreateCorrelationId();
+        Map<String, Object> payload = Map.of(
+                "taskId", taskId.toString(),
+                "productId", productId.toString(),
+                "userId", userId.toString(),
+                "correlationId", correlationId,
+                "creativeState", creativeState != null ? creativeState : Map.of()
+        );
+        fireAndForget("/ai/workflows/reference-analysis", payload, taskId, "ReferenceAnalysis");
+    }
+
+    public void startCreativePlanGeneration(UUID taskId, UUID productId, UUID userId,
+                                              Map<String, Object> creativeState) {
+        String correlationId = getOrCreateCorrelationId();
+        Map<String, Object> payload = Map.of(
+                "taskId", taskId.toString(),
+                "productId", productId.toString(),
+                "userId", userId.toString(),
+                "correlationId", correlationId,
+                "creativeState", creativeState != null ? creativeState : Map.of()
+        );
+        fireAndForget("/ai/workflows/creative-plan-generation", payload, taskId, "CreativePlanGeneration");
+    }
+
+    public void startStoryboardGeneration(UUID taskId, UUID productId, UUID userId,
+                                           UUID selectedPlanId, Map<String, Object> selectedPlan,
+                                           int duration, String videoType) {
+        String correlationId = getOrCreateCorrelationId();
+        Map<String, Object> payload = Map.of(
+                "taskId", taskId.toString(),
+                "productId", productId.toString(),
+                "userId", userId.toString(),
+                "correlationId", correlationId,
+                "selectedPlanId", selectedPlanId.toString(),
+                "selectedPlan", selectedPlan != null ? selectedPlan : Map.of(),
+                "duration", duration,
+                "videoType", videoType
+        );
+        fireAndForget("/ai/workflows/storyboard-generation", payload, taskId, "StoryboardGeneration");
+    }
+
+    public void startKeyframeGeneration(UUID taskId, UUID productId, UUID userId,
+                                          Map<String, Object> keyframeParams) {
+        String correlationId = getOrCreateCorrelationId();
+        Map<String, Object> payload = Map.of(
+                "taskId", taskId.toString(),
+                "productId", productId.toString(),
+                "userId", userId.toString(),
+                "correlationId", correlationId,
+                "params", keyframeParams != null ? keyframeParams : Map.of()
+        );
+        fireAndForget("/ai/workflows/keyframe-generation", payload, taskId, "KeyframeGeneration");
+    }
+
+    public void startVideoClipGeneration(UUID taskId, UUID productId, UUID userId,
+                                           Map<String, Object> clipParams) {
+        String correlationId = getOrCreateCorrelationId();
+        Map<String, Object> payload = Map.of(
+                "taskId", taskId.toString(),
+                "productId", productId.toString(),
+                "userId", userId.toString(),
+                "correlationId", correlationId,
+                "params", clipParams != null ? clipParams : Map.of()
+        );
+        fireAndForget("/ai/workflows/video-clip-generation", payload, taskId, "VideoClipGeneration");
+    }
+
+    public void startRepairWorkflow(UUID taskId, UUID productId, UUID userId,
+                                     UUID repairEventId, String targetType) {
+        String correlationId = getOrCreateCorrelationId();
+        Map<String, Object> payload = Map.of(
+                "taskId", taskId.toString(),
+                "productId", productId.toString(),
+                "userId", userId.toString(),
+                "correlationId", correlationId,
+                "repairEventId", repairEventId.toString(),
+                "targetType", targetType != null ? targetType : ""
+        );
+        fireAndForget("/ai/workflows/repair", payload, taskId, "RepairWorkflow");
+    }
+
+    private String getOrCreateCorrelationId() {
+        String correlationId = org.slf4j.MDC.get("correlationId");
+        if (correlationId == null) {
+            correlationId = UUID.randomUUID().toString();
+        }
+        return correlationId;
+    }
+
+    private void fireAndForget(String uri, Map<String, Object> payload, UUID taskId, String workflowName) {
+        try {
+            restClient.post()
+                    .uri(baseUrl + uri)
+                    .body(payload)
+                    .retrieve()
+                    .toBodilessEntity();
+            log.info("Started {} for taskId={}", workflowName, taskId);
+        } catch (Exception e) {
+            log.warn("Failed to notify AI orchestrator for task {} ({}): {}", taskId, workflowName, e.getMessage());
+        }
+    }
 }

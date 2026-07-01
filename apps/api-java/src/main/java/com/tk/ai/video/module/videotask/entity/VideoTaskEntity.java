@@ -38,6 +38,13 @@ public class VideoTaskEntity {
     private String errorMessage;
     private Boolean errorRetryable;
     private int retryCount;
+
+    // Fashion Creative Loop V1 fields
+    private String taskMode;
+    private String productCategory;
+    private Integer shotCount;
+    private int currentVersion;
+
     private String aiWorkflowId;
     private String renderTaskId;
     private OffsetDateTime startedAt;

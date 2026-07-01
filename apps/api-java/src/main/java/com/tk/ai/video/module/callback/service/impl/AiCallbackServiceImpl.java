@@ -4,10 +4,19 @@ import com.tk.ai.video.common.InvalidStateTransitionException;
 import com.tk.ai.video.common.ResourceNotFoundException;
 import com.tk.ai.video.module.callback.dto.AiCallbackRequest;
 import com.tk.ai.video.module.callback.service.AiCallbackService;
+import com.tk.ai.video.module.creativestate.entity.CreativeStateEntity;
+import com.tk.ai.video.module.creativestate.mapper.CreativeStateMapper;
+import com.tk.ai.video.module.keyframe.entity.KeyframeEntity;
+import com.tk.ai.video.module.keyframe.mapper.KeyframeMapper;
 import com.tk.ai.video.module.product.entity.ProductEntity;
 import com.tk.ai.video.module.product.mapper.ProductMapper;
+import com.tk.ai.video.module.quota.service.QuotaService;
+import com.tk.ai.video.module.repairevent.entity.RepairEventEntity;
+import com.tk.ai.video.module.repairevent.mapper.RepairEventMapper;
 import com.tk.ai.video.module.storyboard.entity.*;
 import com.tk.ai.video.module.storyboard.mapper.*;
+import com.tk.ai.video.module.videoclip.entity.VideoClipEntity;
+import com.tk.ai.video.module.videoclip.mapper.VideoClipMapper;
 import com.tk.ai.video.module.videotask.entity.VideoTaskEntity;
 import com.tk.ai.video.module.videotask.mapper.VideoTaskMapper;
 import com.tk.ai.video.module.videotask.state.VideoTaskStateMachine;
@@ -32,6 +41,13 @@ public class AiCallbackServiceImpl implements AiCallbackService {
     private final StoryboardMapper storyboardMapper;
     private final StoryboardShotMapper storyboardShotMapper;
     private final RenderMessageProducer renderMessageProducer;
+
+    // Fashion Creative Loop V1 mappers
+    private final KeyframeMapper keyframeMapper;
+    private final VideoClipMapper videoClipMapper;
+    private final CreativeStateMapper creativeStateMapper;
+    private final RepairEventMapper repairEventMapper;
+    private final QuotaService quotaService;
 
     @Override
     @Transactional
@@ -174,11 +190,196 @@ public class AiCallbackServiceImpl implements AiCallbackService {
                             task.getId(), renderTaskId, correlationId, manifest);
                 }
                 advanceTask(task, "rendering");
-            /*当 switch 匹配到 "render_manifest" 这个分支时：
-提取渲染清单 Map。
-若清单中有 manifestVersion 字段且为字符串，则设置到任务对象。
-生成一个渲染任务 ID 和链路关联 ID。
-将渲染任务发送到消息队列，然后把本地任务状态置为“rendering”。*/
+            }
+            // ── Fashion Creative Loop V1 stage handlers ──
+            case "asset_analysis" -> {
+                // AI analyzed uploaded assets — advance to confirmation
+                advanceTask(task, "waiting_asset_confirmation");
+            }
+            case "reference_analysis" -> {
+                // AI analyzed reference video — save to creative_state if not exists
+                if (request.getReferenceAnalysis() != null) {
+                    CreativeStateEntity cs = creativeStateMapper.findByTaskId(task.getId())
+                            .orElseGet(() -> {
+                                CreativeStateEntity newCs = new CreativeStateEntity();
+                                newCs.setId(java.util.UUID.randomUUID());
+                                newCs.setTaskId(task.getId());
+                                newCs.setUserId(task.getUserId());
+                                newCs.setVersion(1);
+                                return newCs;
+                            });
+                    cs.setReferenceVideoJson(request.getReferenceAnalysis());
+                    cs.setUpdatedAt(java.time.OffsetDateTime.now());
+                    if (creativeStateMapper.selectById(cs.getId()) != null) {
+                        creativeStateMapper.updateById(cs);
+                    } else {
+                        creativeStateMapper.insert(cs);
+                    }
+                }
+                advanceTask(task, "plan_generating");
+            }
+            case "creative_plan" -> {
+                // AI generated creative plans — save as video plans
+                if (request.getPlans() != null) {
+                    List<Map<String, Object>> planList = request.getPlans();
+                    if (planList != null) {
+                        for (Map<String, Object> planData : planList) {
+                            VideoPlanEntity plan = new VideoPlanEntity();
+                            plan.setId(java.util.UUID.randomUUID());
+                            plan.setTaskId(task.getId());
+                            plan.setProductId(task.getProductId());
+                            plan.setUserId(task.getUserId());
+                            plan.setType((String) planData.getOrDefault("type", task.getVideoType()));
+                            plan.setTitle((String) planData.get("title"));
+                            plan.setHook((String) planData.get("hook"));
+                            plan.setStructure((String) planData.get("structure"));
+                            plan.setReason((String) planData.get("reason"));
+                            plan.setEstimatedDuration(getInt(planData, "estimatedDuration"));
+                            plan.setScore(getInt(planData, "score"));
+                            plan.setRawAiOutput(planData);
+                            videoPlanMapper.insert(plan);
+                        }
+                    }
+                }
+                advanceTask(task, "plan_generated");
+                advanceTask(task, "waiting_plan_selection");
+            }
+            case "keyframe" -> {
+                // AI generated keyframes — save to keyframes table
+                if (request.getKeyframes() != null) {
+                    for (Map<String, Object> kfData : request.getKeyframes()) {
+                        int shotNo = getInt(kfData, "shotNo");
+                        String kfStatus = (String) kfData.get("status");
+
+                        if ("completed".equals(kfStatus)) {
+                            // Find existing keyframe for this shot
+                            List<KeyframeEntity> existing = keyframeMapper.findByTaskId(task.getId()).stream()
+                                    .filter(k -> k.getShotNo() == shotNo)
+                                    .collect(java.util.stream.Collectors.toList());
+
+                            KeyframeEntity kf;
+                            if (!existing.isEmpty()) {
+                                kf = existing.get(0);
+                                kf.setVersion(kf.getVersion() + 1);
+                            } else {
+                                kf = new KeyframeEntity();
+                                kf.setId(java.util.UUID.randomUUID());
+                                kf.setTaskId(task.getId());
+                                kf.setUserId(task.getUserId());
+                                kf.setShotNo(shotNo);
+                                kf.setVersion(task.getCurrentVersion());
+                            }
+                            kf.setSource("ai_generated");
+                            kf.setUrl((String) kfData.get("url"));
+                            kf.setPrompt((String) kfData.get("prompt"));
+                            kf.setNegativePrompt((String) kfData.get("negativePrompt"));
+                            kf.setProvider((String) kfData.get("provider"));
+                            kf.setModelName((String) kfData.get("modelName"));
+                            kf.setStatus("generated");
+                            kf.setUpdatedAt(java.time.OffsetDateTime.now());
+
+                            if (existing.isEmpty()) {
+                                keyframeMapper.insert(kf);
+                            } else {
+                                keyframeMapper.updateById(kf);
+                            }
+
+                            // Consume image quota for AI-generated keyframe (idempotent)
+                            String idempotencyKey = "keyframe:" + kf.getId() + ":image:consume";
+                            quotaService.consumeQuota(task.getUserId(), task.getId(), "image", 1, idempotencyKey);
+                        }
+                    }
+                }
+                advanceTask(task, "waiting_image_confirmation");
+            }
+            case "video_clip" -> {
+                // AI generated video clips — save to video_clips table
+                if (request.getClips() != null) {
+                    for (Map<String, Object> clipData : request.getClips()) {
+                        int shotNo = getInt(clipData, "shotNo");
+                        String clipStatus = (String) clipData.get("status");
+
+                        if ("completed".equals(clipStatus)) {
+                            List<VideoClipEntity> existing = videoClipMapper.findByTaskId(task.getId()).stream()
+                                    .filter(c -> c.getShotNo() == shotNo)
+                                    .collect(java.util.stream.Collectors.toList());
+
+                            VideoClipEntity clip;
+                            if (!existing.isEmpty()) {
+                                clip = existing.get(0);
+                                clip.setVersion(clip.getVersion() + 1);
+                            } else {
+                                clip = new VideoClipEntity();
+                                clip.setId(java.util.UUID.randomUUID());
+                                clip.setTaskId(task.getId());
+                                clip.setUserId(task.getUserId());
+                                clip.setShotNo(shotNo);
+                                clip.setVersion(task.getCurrentVersion());
+                            }
+                            clip.setSource("ai_generated");
+                            clip.setUrl((String) clipData.get("url"));
+                            clip.setPrompt((String) clipData.get("prompt"));
+                            clip.setNegativePrompt((String) clipData.get("negativePrompt"));
+                            clip.setProvider((String) clipData.get("provider"));
+                            clip.setModelName((String) clipData.get("modelName"));
+                            clip.setDuration(getInt(clipData, "duration"));
+                            clip.setStatus("generated");
+                            clip.setUpdatedAt(java.time.OffsetDateTime.now());
+
+                            if (existing.isEmpty()) {
+                                videoClipMapper.insert(clip);
+                            } else {
+                                videoClipMapper.updateById(clip);
+                            }
+
+                            // Consume video_clip quota for AI-generated clip (idempotent)
+                            String idempotencyKey = "videoclip:" + clip.getId() + ":video_clip:consume";
+                            quotaService.consumeQuota(task.getUserId(), task.getId(), "video_clip", 1, idempotencyKey);
+                        }
+                    }
+                }
+                advanceTask(task, "waiting_video_clip_confirmation");
+            }
+            case "qa" -> {
+                // Quality check result — advance based on outcome
+                if (request.getQaResult() != null) {
+                    Boolean passed = (Boolean) request.getQaResult().get("passed");
+                    if (Boolean.TRUE.equals(passed)) {
+                        advanceTask(task, "waiting_final_review");
+                    } else {
+                        advanceTask(task, "repairing");
+                    }
+                } else {
+                    advanceTask(task, "waiting_final_review");
+                }
+            }
+            case "repair" -> {
+                // Repair workflow completed — determine next state
+                if (request.getRepairResult() != null) {
+                    String targetType = (String) request.getRepairResult().get("targetType");
+                    // Update the repair event status
+                    String targetId = (String) request.getRepairResult().get("targetId");
+                    if (targetId != null) {
+                        try {
+                            RepairEventEntity repairEvent = repairEventMapper.selectById(java.util.UUID.fromString(targetId));
+                            if (repairEvent != null) {
+                                repairEvent.setStatus("completed");
+                                repairEvent.setAfterVersion(task.getCurrentVersion() + 1);
+                                repairEvent.setUpdatedAt(java.time.OffsetDateTime.now());
+                                repairEventMapper.updateById(repairEvent);
+                            }
+                        } catch (IllegalArgumentException ignored) {
+                            // targetId is not a UUID — skip update
+                        }
+                    }
+                    task.setCurrentVersion(task.getCurrentVersion() + 1);
+
+                    // Route to the appropriate retry target based on repair target
+                    String retryTarget = VideoTaskStateMachine.getRetryTarget("repair");
+                    advanceTask(task, retryTarget);
+                } else {
+                    advanceTask(task, "keyframe_configuring");
+                }
             }
             default -> log.warn("Unknown callback stage: {}", stage);
         }
@@ -249,6 +450,29 @@ public class AiCallbackServiceImpl implements AiCallbackService {
             case "material" -> List.of("material_generated", "rendering", "checking", "completed", "exported").contains(taskStatus);
             case "quality_check" -> List.of("rendering", "checking", "completed", "exported").contains(taskStatus);
             case "render_manifest" -> List.of("rendering", "checking", "completed", "exported").contains(taskStatus);
+            // Fashion Creative Loop V1 idempotency guards
+            case "asset_analysis" -> List.of("waiting_asset_confirmation", "reference_analyzing", "plan_generating",
+                    "waiting_plan_selection", "storyboard_generating", "waiting_storyboard_confirmation",
+                    "keyframe_configuring", "image_generating", "waiting_image_confirmation",
+                    "video_clip_generating", "waiting_video_clip_confirmation", "rendering",
+                    "completed", "exported").contains(taskStatus);
+            case "reference_analysis" -> List.of("plan_generating", "waiting_plan_selection",
+                    "storyboard_generating", "waiting_storyboard_confirmation",
+                    "keyframe_configuring", "image_generating", "waiting_image_confirmation",
+                    "video_clip_generating", "waiting_video_clip_confirmation", "rendering",
+                    "completed", "exported").contains(taskStatus);
+            case "creative_plan" -> List.of("plan_generated", "waiting_plan_selection",
+                    "storyboard_generating", "waiting_storyboard_confirmation",
+                    "keyframe_configuring", "image_generating", "waiting_image_confirmation",
+                    "video_clip_generating", "waiting_video_clip_confirmation", "rendering",
+                    "completed", "exported").contains(taskStatus);
+            case "keyframe" -> List.of("waiting_image_confirmation",
+                    "video_clip_generating", "waiting_video_clip_confirmation", "rendering",
+                    "completed", "exported").contains(taskStatus);
+            case "video_clip" -> List.of("waiting_video_clip_confirmation", "rendering",
+                    "completed", "exported").contains(taskStatus);
+            case "qa" -> List.of("waiting_final_review", "rendering", "completed", "exported").contains(taskStatus);
+            case "repair" -> List.of("completed", "exported").contains(taskStatus);
             default -> false;
         };
     }
