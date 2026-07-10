@@ -2,7 +2,7 @@
 
 import { apiRequest } from "@/lib/api-client";
 import { TaskProgress } from "@/components/task-progress";
-import { STATUS_LABELS, VIDEO_TYPE_LABELS } from "@/types/api";
+import { STATUS_LABELS, TASK_MODE_LABELS, VIDEO_TYPE_LABELS } from "@/types/api";
 import type { Video, VideoTask } from "@/types/api";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -129,9 +129,14 @@ export default function TaskProgressPage() {
           ← 返回工作台
         </Link>
         <h1 className="mt-2 text-2xl font-bold">
-          {VIDEO_TYPE_LABELS[task.videoType] || task.videoType}
+          {TASK_MODE_LABELS[task.taskMode] || "创作任务"}
           <span className="ml-2 text-base font-normal text-muted-foreground">{task.duration}s</span>
         </h1>
+        {task.videoType && (
+          <p className="mt-1 text-sm text-muted-foreground">
+            {VIDEO_TYPE_LABELS[task.videoType] || task.videoType}
+          </p>
+        )}
         <div className="mt-1 flex items-center gap-2">
           <span
             className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${

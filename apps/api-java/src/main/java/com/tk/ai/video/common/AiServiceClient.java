@@ -59,7 +59,7 @@ public class AiServiceClient {
             String productLink, List<String> imageUrls,
             String targetMarket, String language
     ) {
-        String correlationId = MDC.get("correlationId");
+        String correlationId = MDC.get("correlationId");//从日志上下文拿链路 ID
         if (correlationId == null) {
             correlationId = UUID.randomUUID().toString();
         }
@@ -84,12 +84,12 @@ public class AiServiceClient {
                     .uri(baseUrl + "/ai/workflows/product-analysis")
                     .body(payload)
                     .retrieve()
-                    .toBodilessEntity();
+                    .toBodilessEntity(); // ← 不等响应体
             log.info("Started ProductAnalysisWorkflow for taskId={}", taskId);
         } catch (Exception e) {
             log.warn("Failed to notify AI orchestrator for task {}: {}", taskId, e.getMessage());
             // Fire-and-forget: task stays in "analyzing" until AI callback arrives.
-            // A scheduled cleanup job handles tasks stuck for >30min.
+            // A scheduled cleanup job handles tasks stuck for >30min.不抛异常 — 任务留在 analyzing 状态等定时清理
         }
     }
 
@@ -188,33 +188,37 @@ public class AiServiceClient {
     }
 
     public void startKeyframeGeneration(UUID taskId, UUID productId, UUID userId,
-                                          Map<String, Object> keyframeParams) {
+                                          Map<String, Object> storyboard) {
         String correlationId = getOrCreateCorrelationId();
         Map<String, Object> payload = Map.of(
                 "taskId", taskId.toString(),
                 "productId", productId.toString(),
                 "userId", userId.toString(),
                 "correlationId", correlationId,
-                "params", keyframeParams != null ? keyframeParams : Map.of()
+                "storyboard", storyboard != null ? storyboard : Map.of()
         );
         fireAndForget("/ai/workflows/keyframe-generation", payload, taskId, "KeyframeGeneration");
     }
 
     public void startVideoClipGeneration(UUID taskId, UUID productId, UUID userId,
-                                           Map<String, Object> clipParams) {
+                                           Map<String, Object> storyboard,
+                                           Map<String, Object> keyframes) {
         String correlationId = getOrCreateCorrelationId();
         Map<String, Object> payload = Map.of(
                 "taskId", taskId.toString(),
                 "productId", productId.toString(),
                 "userId", userId.toString(),
                 "correlationId", correlationId,
-                "params", clipParams != null ? clipParams : Map.of()
+                "storyboard", storyboard != null ? storyboard : Map.of(),
+                "keyframes", keyframes != null ? keyframes : Map.of("keyframes", List.of())
         );
         fireAndForget("/ai/workflows/video-clip-generation", payload, taskId, "VideoClipGeneration");
     }
 
     public void startRepairWorkflow(UUID taskId, UUID productId, UUID userId,
-                                     UUID repairEventId, String targetType) {
+                                      UUID repairEventId, String feedbackText,
+                                      String category, String targetType,
+                                      Map<String, Object> currentState) {
         String correlationId = getOrCreateCorrelationId();
         Map<String, Object> payload = Map.of(
                 "taskId", taskId.toString(),
@@ -222,7 +226,10 @@ public class AiServiceClient {
                 "userId", userId.toString(),
                 "correlationId", correlationId,
                 "repairEventId", repairEventId.toString(),
-                "targetType", targetType != null ? targetType : ""
+                "feedbackText", feedbackText != null ? feedbackText : "",
+                "category", category != null ? category : "general",
+                "targetType", targetType != null ? targetType : "video_clip",
+                "currentState", currentState != null ? currentState : Map.of()
         );
         fireAndForget("/ai/workflows/repair", payload, taskId, "RepairWorkflow");
     }

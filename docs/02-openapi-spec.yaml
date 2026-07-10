@@ -90,6 +90,18 @@ paths:
               schema:
                 $ref: "#/components/schemas/AuthResponse"
 
+  /api/users/me:
+    get:
+      tags: [Users]
+      summary: Get current user profile
+      responses:
+        "200":
+          description: Current user info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+
   /api/products:
     post:
       tags: [Products]
@@ -285,6 +297,20 @@ paths:
               schema:
                 $ref: "#/components/schemas/VideoTaskStatusResponse"
 
+  /api/video-tasks/{taskId}/cancel:
+    post:
+      tags: [VideoTasks]
+      summary: Cancel an in-progress task
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Task cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoTaskStatusResponse"
+
   # ── Fashion Creative Loop V1 (M2) ──
 
   /api/video-tasks/{taskId}/assets:
@@ -463,6 +489,20 @@ paths:
               schema:
                 $ref: "#/components/schemas/KeyframeListResponse"
 
+  /api/video-tasks/{taskId}/keyframes/generate:
+    post:
+      tags: [VideoTasks]
+      summary: Generate AI keyframes for unconfigured storyboard shots
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Keyframe generation triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyframeListResponse"
+
   /api/video-tasks/{taskId}/keyframes/{keyframeId}/confirm:
     post:
       tags: [VideoTasks]
@@ -514,6 +554,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/VideoTaskStatusResponse"
+
+  /api/video-tasks/{taskId}/keyframes/{keyframeId}/regenerate:
+    post:
+      tags: [VideoTasks]
+      summary: Regenerate a rejected or failed keyframe
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - name: keyframeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Keyframe regeneration triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyframeListResponse"
 
   /api/video-tasks/{taskId}/video-clips:
     get:
@@ -1146,7 +1206,7 @@ components:
 
     CreateProductRequest:
       type: object
-      required: [name, imageUrls, targetMarket, language]
+      required: [name, targetMarket, language]
       properties:
         name:
           type: string
@@ -1156,7 +1216,7 @@ components:
           type: string
         imageUrls:
           type: array
-          minItems: 1
+          description: Optional for non-product-first Fashion Creative Loop modes. Product creative mode should still provide at least one product image.
           items:
             type: string
             format: uri
@@ -1285,7 +1345,7 @@ components:
 
     CreateVideoTaskRequest:
       type: object
-      required: [productId, duration, videoType]
+      required: [productId, duration]
       properties:
         productId:
           type: string
@@ -1295,6 +1355,7 @@ components:
           enum: [15, 20, 25, 30]
         videoType:
           $ref: "#/components/schemas/VideoType"
+          description: Legacy video structure hint. Optional for Fashion Creative Loop modes; AI creative_plan will produce the actual structure candidates.
         needSubtitles:
           type: boolean
           default: true

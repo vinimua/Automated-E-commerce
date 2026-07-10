@@ -23,7 +23,11 @@ public class RepairEventEntity {
 
     private String targetType;
     private String targetId;
+
+    @TableField("feedback_text")
     private String userFeedback;
+
+    @TableField("feedback_category")
     private String issueType;
 
     @TableField(typeHandler = JsonbTypeHandler.class)

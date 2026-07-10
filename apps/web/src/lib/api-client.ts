@@ -1,7 +1,7 @@
 // V1 API Client — wraps fetch with JWT auth and auto-refresh
 // Full implementation in Phase 3.
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8099";
 
 type RequestOptions = {
   method?: string;

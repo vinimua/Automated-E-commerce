@@ -374,6 +374,7 @@ class RepairPreserveConstraints(StrictModel):
 
 
 class RepairResult(StrictModel):
+    repairEventId: Optional[str] = None
     feedbackCategory: Literal[
         "visual_quality",
         "product_accuracy",
@@ -384,7 +385,7 @@ class RepairResult(StrictModel):
         "style_mismatch",
         "other",
     ]
-    targetType: Literal["storyboard", "keyframe", "video_clip", "plan"]
+    targetType: Literal["storyboard", "keyframe", "video_clip", "plan", "render_manifest", "final_video"]
     strategy: Literal[
         "rewrite_storyboard_shot",
         "regenerate_keyframe_prompt",

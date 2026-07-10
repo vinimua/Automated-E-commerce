@@ -63,6 +63,7 @@ export default function KeyframesPage() {
   const [uploadPurpose, setUploadPurpose] = useState("first_frame");
   const [genPrompt, setGenPrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [batchGenerating, setBatchGenerating] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -163,6 +164,32 @@ export default function KeyframesPage() {
     }
   }
 
+  async function handleGenerateAll() {
+    setBatchGenerating(true);
+    setError("");
+    try {
+      await apiRequest(`/api/video-tasks/${id}/keyframes/generate`, { method: "POST" });
+      load();
+    } catch (e: any) {
+      setError(e.message || "批量生成失败");
+    } finally {
+      setBatchGenerating(false);
+    }
+  }
+
+  async function handleRegenerate(keyframeId: string) {
+    setSubmitting(true);
+    setError("");
+    try {
+      await apiRequest(`/api/video-tasks/${id}/keyframes/${keyframeId}/regenerate`, { method: "POST" });
+      load();
+    } catch (e: any) {
+      setError(e.message || "重新生成失败");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-96 items-center justify-center">
@@ -176,6 +203,10 @@ export default function KeyframesPage() {
   const allConfirmed = shots.length > 0 && shots.every((s) => {
     const kf = getKeyframeForShot(s.shotNo ?? 0);
     return kf?.status === "confirmed";
+  });
+  const unconfiguredShots = shots.filter((s) => {
+    const kf = getKeyframeForShot(s.shotNo ?? 0);
+    return !kf || kf.status === "draft" || kf.status === "rejected" || kf.status === "failed";
   });
 
   return (
@@ -198,6 +229,23 @@ export default function KeyframesPage() {
           </Link>
         )}
       </div>
+
+      {/* Batch generate banner */}
+      {canConfigure && unconfiguredShots.length > 0 && (
+        <div className="rounded-lg border-2 border-dashed border-primary/50 bg-primary/5 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-lg">{unconfiguredShots.length} 个镜头等待生成关键帧</p>
+              <p className="text-sm text-muted-foreground mt-1">一键为所有未配置的镜头触发 AI 关键帧生成</p>
+            </div>
+            <button onClick={handleGenerateAll} disabled={batchGenerating}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-6 py-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 shadow-sm">
+              <Wand2 className="h-4 w-4" />
+              {batchGenerating ? "触发中..." : "一键全部 AI 生成"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
 
@@ -269,7 +317,7 @@ export default function KeyframesPage() {
                 {/* Actions */}
                 {canConfigure && (
                   <div className="flex items-center gap-2">
-                    {(!kf || kf.status === "rejected" || kf.status === "draft") ? (
+                    {(!kf || kf.status === "rejected" || kf.status === "draft" || kf.status === "failed") ? (
                       <>
                         <button onClick={() => { setActiveShot(shotNo); setUploadMode("upload"); setUploadPurpose("first_frame"); }}
                           className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent">
@@ -283,6 +331,12 @@ export default function KeyframesPage() {
                           className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent">
                           <Wand2 className="h-3.5 w-3.5" />AI 生成
                         </button>
+                        {(kf?.status === "rejected" || kf?.status === "failed") && (
+                          <button onClick={() => handleRegenerate(kf.keyframeId)}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/50 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100">
+                            <Wand2 className="h-3.5 w-3.5" />重新生成
+                          </button>
+                        )}
                       </>
                     ) : kf.status === "uploaded" || kf.status === "generated" ? (
                       <>

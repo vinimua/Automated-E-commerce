@@ -465,6 +465,24 @@ export interface paths {
       };
     };
   };
+  "/api/video-tasks/{taskId}/keyframes/generate": {
+    /** Generate AI keyframes for unconfigured storyboard shots */
+    post: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+        };
+      };
+      responses: {
+        /** @description Keyframe generation triggered */
+        200: {
+          content: {
+            "application/json": components["schemas"]["KeyframeListResponse"];
+          };
+        };
+      };
+    };
+  };
   "/api/video-tasks/{taskId}/keyframes/{keyframeId}/confirm": {
     /** Confirm a keyframe */
     post: {
@@ -508,6 +526,25 @@ export interface paths {
         200: {
           content: {
             "application/json": components["schemas"]["VideoTaskStatusResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/video-tasks/{taskId}/keyframes/{keyframeId}/regenerate": {
+    /** Regenerate a rejected or failed keyframe */
+    post: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+          keyframeId: string;
+        };
+      };
+      responses: {
+        /** @description Keyframe regeneration triggered */
+        200: {
+          content: {
+            "application/json": components["schemas"]["KeyframeListResponse"];
           };
         };
       };
@@ -1016,7 +1053,8 @@ export interface components {
       name: string;
       description?: string;
       productLink?: string;
-      imageUrls: string[];
+      /** @description Optional for non-product-first Fashion Creative Loop modes. Product creative mode should still provide at least one product image. */
+      imageUrls?: string[];
       /** @example US */
       targetMarket: string;
       /** @example en */
@@ -1076,7 +1114,8 @@ export interface components {
       productId: string;
       /** @enum {integer} */
       duration: 15 | 20 | 25 | 30;
-      videoType: components["schemas"]["VideoType"];
+      /** @description Legacy video structure hint. Optional for Fashion Creative Loop modes; AI creative_plan will produce the actual structure candidates. */
+      videoType?: components["schemas"]["VideoType"];
       /** @default true */
       needSubtitles?: boolean;
       /** @default false */

@@ -1,4 +1,4 @@
-"""JSON extraction + validation + repair + retry pipeline."""
+"""JSON extraction + validation + repair + retry pipeline.LLM 输出的 JSON 经常有小毛病，它负责修好再校验"""
 
 import json
 import logging

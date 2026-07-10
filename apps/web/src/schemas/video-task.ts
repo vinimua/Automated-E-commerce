@@ -51,7 +51,7 @@ export const TaskModeSchema = z.enum([
 export const CreateVideoTaskSchema = z
   .object({
     productId: z.string().uuid(),
-    videoType: VideoTypeSchema,
+    videoType: VideoTypeSchema.optional(),
     taskMode: TaskModeSchema.default("PRODUCT_CREATIVE"),
     productCategory: z.string().trim().min(1).optional(),
     shotCount: z.number().int().min(1).max(12).optional(),

@@ -21,6 +21,9 @@ public interface KeyframeMapper extends BaseMapper<KeyframeEntity> {
     @Select("SELECT * FROM keyframes WHERE task_id = #{taskId} AND version = #{version} ORDER BY shot_no")
     List<KeyframeEntity> findByTaskIdAndVersion(UUID taskId, int version);
 
+    @Select("SELECT * FROM keyframes WHERE task_id = #{taskId} AND shot_no = #{shotNo} AND version = #{version} LIMIT 1")
+    Optional<KeyframeEntity> findByTaskIdAndShotNoAndVersion(UUID taskId, int shotNo, int version);
+
     @Select("SELECT COUNT(*) FROM keyframes WHERE task_id = #{taskId} AND version = #{version} AND status != 'confirmed'")
     long countUnconfirmedByTaskIdAndVersion(UUID taskId, int version);
 }

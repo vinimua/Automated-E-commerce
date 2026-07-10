@@ -56,4 +56,23 @@ public class KeyframeController {
     ) {
         return ApiResponse.ok(keyframeService.rejectKeyframe(taskId, keyframeId, request, principal.getUserId()));
     }
+
+    @PostMapping("/api/video-tasks/{taskId}/keyframes/generate")
+    public ApiResponse<KeyframeListResponse> generateKeyframes(
+            @PathVariable UUID taskId,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        return ApiResponse.ok(new KeyframeListResponse(taskId,
+                keyframeService.generateKeyframes(taskId, principal.getUserId())));
+    }
+
+    @PostMapping("/api/video-tasks/{taskId}/keyframes/{keyframeId}/regenerate")
+    public ApiResponse<KeyframeListResponse> regenerateKeyframe(
+            @PathVariable UUID taskId,
+            @PathVariable UUID keyframeId,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        return ApiResponse.ok(new KeyframeListResponse(taskId,
+                keyframeService.regenerateKeyframe(taskId, keyframeId, principal.getUserId())));
+    }
 }

@@ -2,7 +2,7 @@
 
 import { apiRequest } from "@/lib/api-client";
 import { TaskProgress } from "@/components/task-progress";
-import { STATUS_LABELS, VIDEO_TYPE_LABELS } from "@/types/api";
+import { STATUS_LABELS, TASK_MODE_LABELS, VIDEO_TYPE_LABELS } from "@/types/api";
 import type { UserQuota, VideoTask } from "@/types/api";
 import { PlusCircle, Video, ImageIcon, Download, AlertTriangle, CheckCircle } from "lucide-react";
 import Link from "next/link";
@@ -71,11 +71,11 @@ function getTaskHref(task: VideoTask): string {
   if (["video_clip_generating", "waiting_video_clip_confirmation"].includes(s)) {
     return `/video-tasks/${task.taskId}/clips`;
   }
-  if (["waiting_final_review", "repairing"].includes(s)) {
+  if (["waiting_final_review", "repairing", "rendering"].includes(s)) {
     return `/video-tasks/${task.taskId}/review`;
   }
   // V1 legacy running states → progress page
-  if (["script_generating", "script_generated", "material_generating", "material_generated", "rendering", "checking"].includes(s)) {
+  if (["script_generating", "script_generated", "material_generating", "material_generated", "checking"].includes(s)) {
     return `/video-tasks/${task.taskId}/progress`;
   }
   // Fallback
@@ -84,8 +84,9 @@ function getTaskHref(task: VideoTask): string {
 
 const NEEDS_ACTION_STATES = [
   "waiting_plan_selection", "waiting_asset_confirmation",
-  "waiting_storyboard_confirmation", "waiting_image_confirmation",
-  "waiting_video_clip_confirmation", "waiting_final_review",
+  "waiting_storyboard_confirmation", "keyframe_configuring",
+  "waiting_image_confirmation", "waiting_video_clip_confirmation",
+  "waiting_final_review",
 ];
 
 function TaskCard({ task }: { task: VideoTask }) {
@@ -105,9 +106,14 @@ function TaskCard({ task }: { task: VideoTask }) {
       <div className="flex items-center justify-between">
         <div className="flex-1 min-w-0">
           <p className="font-medium truncate">
-            {VIDEO_TYPE_LABELS[task.videoType] || task.videoType}
+            {TASK_MODE_LABELS[task.taskMode] || "创作任务"}
             <span className="ml-2 text-sm text-muted-foreground">{task.duration}s</span>
           </p>
+          {task.videoType && (
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              {VIDEO_TYPE_LABELS[task.videoType] || task.videoType}
+            </p>
+          )}
           <div className="mt-0.5 flex items-center gap-2 text-sm">
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
               isDone ? "bg-green-100 text-green-700" :
@@ -177,7 +183,7 @@ export default function DashboardPage() {
   }
 
   // Calculate usage stats
-  const activeCount = tasks.filter((t) => !["completed", "failed", "exported"].includes(t.status)).length;
+  const activeCount = tasks.filter((t) => !["completed", "failed", "exported", "cancelled"].includes(t.status)).length;
   const maxConcurrent = 2;
   const maxDaily = 10;
   const atConcurrentLimit = activeCount >= maxConcurrent;

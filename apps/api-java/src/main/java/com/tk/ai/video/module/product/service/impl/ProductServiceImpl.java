@@ -42,13 +42,15 @@ public class ProductServiceImpl implements ProductService {
         product.setStatus("active");
         productMapper.insert(product);
 
-        // Insert product images
-        for (int i = 0; i < request.getImageUrls().size(); i++) {
+        // Insert product images when provided. Some Fashion Creative Loop modes
+        // start from a reference video or user script and can add assets later.
+        List<String> imageUrls = request.getImageUrls() != null ? request.getImageUrls() : List.of();
+        for (int i = 0; i < imageUrls.size(); i++) {
             ProductImageEntity image = new ProductImageEntity();
             image.setProductId(product.getId());
             image.setUserId(userId);
             image.setId(UUID.randomUUID());
-            image.setUrl(request.getImageUrls().get(i));
+            image.setUrl(imageUrls.get(i));
             image.setIsPrimary(i == 0); // first image is primary
             productImageMapper.insert(image);
         }

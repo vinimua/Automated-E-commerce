@@ -21,17 +21,30 @@ public class TaskAssetEntity {
     private UUID taskId;
     private UUID userId;
     private UUID productId;
+    private UUID shotId;
 
+    @TableField("type")
     private String assetKind;
+
+    @TableField("role")
     private String assetRole;
+
     private String source;
 
     private String url;
+
     private String fileName;
+
     private String mimeType;
     private Long sizeBytes;
+
     private String description;
+
+    @TableField("is_confirmed")
     private Boolean confirmed;
+
+    @TableField(typeHandler = JsonbTypeHandler.class)
+    private Map<String, Object> aiTags;
 
     @TableField(typeHandler = JsonbTypeHandler.class)
     private Map<String, Object> metadata;

@@ -70,8 +70,12 @@ public class VideoTaskServiceImpl implements VideoTaskService {
                 || "REFERENCE_STORYBOARD".equals(taskMode)
                 || "USER_SCRIPT".equals(taskMode)
                 || "CUSTOM_STORYBOARD".equals(taskMode);
+        String effectiveVideoType = request.getVideoType() != null ? request.getVideoType() : "pain_point_solution";
 
-        if (!isFashionMode && !VideoType.V1_ALLOWED.contains(request.getVideoType())) {
+        if (!isFashionMode && request.getVideoType() == null) {
+            throw new BusinessException("videoType is required for legacy mode");
+        }
+        if (!isFashionMode && !VideoType.V1_ALLOWED.contains(effectiveVideoType)) {
             throw new BusinessException("V1 only supports: " + String.join(", ", VideoType.V1_ALLOWED));
         }
         if (!ALLOWED_DURATIONS.contains(request.getDuration())) {
@@ -94,7 +98,7 @@ public class VideoTaskServiceImpl implements VideoTaskService {
         // Check concurrent task limit: max 2 in-progress tasks
         long activeCount = videoTaskMapper.selectCount(new LambdaQueryWrapper<VideoTaskEntity>()
                 .eq(VideoTaskEntity::getUserId, userId)
-                .notIn(VideoTaskEntity::getStatus, "completed", "failed", "exported"));
+                .notIn(VideoTaskEntity::getStatus, "completed", "failed", "exported", "cancelled"));
         if (activeCount >= MAX_CONCURRENT_TASKS) {
             throw new BusinessException(40001,
                     "You already have " + activeCount + " active task(s). Maximum " + MAX_CONCURRENT_TASKS + " concurrent tasks allowed. Please wait for them to complete or fail.");
@@ -122,7 +126,7 @@ public class VideoTaskServiceImpl implements VideoTaskService {
         task.setStatus(initialStatus);
         task.setProgress(0);
         task.setDuration(request.getDuration());
-        task.setVideoType(request.getVideoType());
+        task.setVideoType(effectiveVideoType);
         task.setNeedSubtitles(request.getNeedSubtitles() != null ? request.getNeedSubtitles() : true);
         task.setNeedVoiceover(request.getNeedVoiceover() != null ? request.getNeedVoiceover() : false);
         task.setManifestVersion("1.0.0");
@@ -143,9 +147,10 @@ public class VideoTaskServiceImpl implements VideoTaskService {
         String idempotencyKey = "task:" + taskId + ":video:create";
         quotaService.consumeQuota(userId, taskId, "video", 1, idempotencyKey);
 
-        log.info("VideoTask created: taskId={}, videoType={}, duration={}s, taskMode={}", taskId, request.getVideoType(), request.getDuration(), taskMode);
+        log.info("VideoTask created: taskId={}, videoType={}, duration={}s, taskMode={}", taskId, effectiveVideoType, request.getDuration(), taskMode);
 
         // Dispatch to Python AI orchestrator only for legacy mode
+        //如果当前任务不是新版 Fashion Creative Loop 流程，就启动旧版 V1 的 Python AI 分析流程
         if (!isFashionMode) {
             List<String> imageUrls = productImageMapper.findByProductId(product.getId()).stream()
                     .map(img -> img.getUrl())
@@ -391,6 +396,22 @@ public class VideoTaskServiceImpl implements VideoTaskService {
         task.setProgress(95);
         task.setUpdatedAt(OffsetDateTime.now());
         videoTaskMapper.updateById(task);
+
+        Map<String, Object> currentState = Map.of(
+                "status", task.getStatus(),
+                "currentVersion", task.getCurrentVersion(),
+                "repairEventId", repairEvent.getId().toString()
+        );
+        aiServiceClient.startRepairWorkflow(
+                taskId,
+                task.getProductId(),
+                userId,
+                repairEvent.getId(),
+                request.getFeedbackText(),
+                request.getCategory(),
+                request.getTargetType(),
+                currentState
+        );
 
         log.info("Feedback submitted, task entering repair: taskId={}, repairEventId={}", taskId, repairEvent.getId());
         return new VideoTaskStatusResponse(taskId, "repairing", 95);

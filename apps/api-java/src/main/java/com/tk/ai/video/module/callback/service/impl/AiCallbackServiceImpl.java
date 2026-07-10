@@ -40,13 +40,13 @@ public class AiCallbackServiceImpl implements AiCallbackService {
     private final VideoPlanMapper videoPlanMapper;
     private final StoryboardMapper storyboardMapper;
     private final StoryboardShotMapper storyboardShotMapper;
-    private final RenderMessageProducer renderMessageProducer;
+    private final RenderMessageProducer renderMessageProducer;// RabbitMQ 推送
 
     // Fashion Creative Loop V1 mappers
     private final KeyframeMapper keyframeMapper;
     private final VideoClipMapper videoClipMapper;
-    private final CreativeStateMapper creativeStateMapper;
-    private final RepairEventMapper repairEventMapper;
+    private final CreativeStateMapper creativeStateMapper;// 创意状态表
+    private final RepairEventMapper repairEventMapper;// 修复事件表
     private final QuotaService quotaService;
 
     @Override
@@ -74,10 +74,10 @@ public class AiCallbackServiceImpl implements AiCallbackService {
     private void handleSuccess(AiCallbackRequest request, VideoTaskEntity task) {
         //按阶段分流
         String stage = request.getStage();
-
+        //每一个 case 做三件事：解析数据 → 写入数据库 → 推进任务状态。
         switch (stage) {
             case "product_analysis" -> {
-                // Save analysis to product
+                // Python 分析了商品 → 把分析结果写回 ProductEntity
                 if (request.getProductAnalysis() != null) {
                     ProductEntity product = productMapper.selectById(task.getProductId());
                     if (product != null) {
@@ -96,7 +96,8 @@ public class AiCallbackServiceImpl implements AiCallbackService {
                 advanceTask(task, "analysis_completed");
             }
             case "video_plan" -> {
-                // Save plans
+                //Python 生成了视频方案 → 写入 video_plans 表 → 推进到等待用户选择
+
                 if (request.getPlans() != null) {
                     for (Map<String, Object> planData : request.getPlans()) {
                         VideoPlanEntity plan = new VideoPlanEntity();
@@ -171,6 +172,8 @@ public class AiCallbackServiceImpl implements AiCallbackService {
                 log.debug("Quality check callback received: taskId={}", task.getId());
             }
             case "render_manifest" -> {
+             //   Python 构建了渲染清单 → 保存到 task + 推 RabbitMQ → Render Worker 消费
+
                 if (request.getRenderManifest() != null) {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> manifest = request.getRenderManifest();
@@ -186,6 +189,7 @@ public class AiCallbackServiceImpl implements AiCallbackService {
                     if (correlationId == null) {
                         correlationId = UUID.randomUUID().toString();
                     }
+                    //推 RabbitMQ
                     renderMessageProducer.sendRenderTask(
                             task.getId(), renderTaskId, correlationId, manifest);
                 }
@@ -251,42 +255,58 @@ public class AiCallbackServiceImpl implements AiCallbackService {
                         int shotNo = getInt(kfData, "shotNo");
                         String kfStatus = (String) kfData.get("status");
 
-                        if ("completed".equals(kfStatus)) {
-                            // Find existing keyframe for this shot
-                            List<KeyframeEntity> existing = keyframeMapper.findByTaskId(task.getId()).stream()
-                                    .filter(k -> k.getShotNo() == shotNo)
-                                    .collect(java.util.stream.Collectors.toList());
+                        KeyframeEntity kf = keyframeMapper
+                                .findByTaskIdAndShotNoAndVersion(task.getId(), shotNo, task.getCurrentVersion())
+                                .orElseGet(() -> {
+                                    KeyframeEntity created = new KeyframeEntity();
+                                    created.setId(java.util.UUID.randomUUID());
+                                    created.setTaskId(task.getId());
+                                    created.setUserId(task.getUserId());
+                                    created.setShotNo(shotNo);
+                                    created.setImagePurpose("first_frame");
+                                    created.setVersion(task.getCurrentVersion());
+                                    return created;
+                                });
+                        boolean isNew = kf.getCreatedAt() == null;
 
-                            KeyframeEntity kf;
-                            if (!existing.isEmpty()) {
-                                kf = existing.get(0);
-                                kf.setVersion(kf.getVersion() + 1);
-                            } else {
-                                kf = new KeyframeEntity();
-                                kf.setId(java.util.UUID.randomUUID());
-                                kf.setTaskId(task.getId());
-                                kf.setUserId(task.getUserId());
-                                kf.setShotNo(shotNo);
-                                kf.setVersion(task.getCurrentVersion());
-                            }
+                        if ("completed".equals(kfStatus)) {
                             kf.setSource("ai_generated");
+                            kf.setImagePurpose((String) kfData.getOrDefault("imagePurpose", "first_frame"));
                             kf.setUrl((String) kfData.get("url"));
                             kf.setPrompt((String) kfData.get("prompt"));
                             kf.setNegativePrompt((String) kfData.get("negativePrompt"));
                             kf.setProvider((String) kfData.get("provider"));
                             kf.setModelName((String) kfData.get("modelName"));
                             kf.setStatus("generated");
+                            kf.setErrorMessage(null);
                             kf.setUpdatedAt(java.time.OffsetDateTime.now());
 
-                            if (existing.isEmpty()) {
+                            if (isNew) {
                                 keyframeMapper.insert(kf);
                             } else {
                                 keyframeMapper.updateById(kf);
                             }
 
                             // Consume image quota for AI-generated keyframe (idempotent)
+                            //idempotencyKey 保证同一次生成重复回调不重复扣费
                             String idempotencyKey = "keyframe:" + kf.getId() + ":image:consume";
                             quotaService.consumeQuota(task.getUserId(), task.getId(), "image", 1, idempotencyKey);
+                        } else if ("failed".equals(kfStatus)) {
+                            kf.setSource("ai_generated");
+                            kf.setImagePurpose((String) kfData.getOrDefault("imagePurpose", "first_frame"));
+                            kf.setPrompt((String) kfData.get("prompt"));
+                            kf.setNegativePrompt((String) kfData.get("negativePrompt"));
+                            kf.setProvider((String) kfData.get("provider"));
+                            kf.setModelName((String) kfData.get("modelName"));
+                            kf.setStatus("failed");
+                            kf.setErrorMessage((String) kfData.get("errorMessage"));
+                            kf.setUpdatedAt(java.time.OffsetDateTime.now());
+
+                            if (isNew) {
+                                keyframeMapper.insert(kf);
+                            } else {
+                                keyframeMapper.updateById(kf);
+                            }
                         }
                     }
                 }
@@ -354,17 +374,20 @@ public class AiCallbackServiceImpl implements AiCallbackService {
                 }
             }
             case "repair" -> {
-                // Repair workflow completed — determine next state
+                // Python 修复完成 → 更新 repair_event → version+1 → 跳回生成状态
+
                 if (request.getRepairResult() != null) {
                     String targetType = (String) request.getRepairResult().get("targetType");
                     // Update the repair event status
-                    String targetId = (String) request.getRepairResult().get("targetId");
+                    String targetId = (String) request.getRepairResult().getOrDefault(
+                            "repairEventId", request.getRepairResult().get("targetId"));
                     if (targetId != null) {
                         try {
                             RepairEventEntity repairEvent = repairEventMapper.selectById(java.util.UUID.fromString(targetId));
                             if (repairEvent != null) {
                                 repairEvent.setStatus("completed");
                                 repairEvent.setAfterVersion(task.getCurrentVersion() + 1);
+                                repairEvent.setRepairPlan(request.getRepairResult());
                                 repairEvent.setUpdatedAt(java.time.OffsetDateTime.now());
                                 repairEventMapper.updateById(repairEvent);
                             }
@@ -375,7 +398,7 @@ public class AiCallbackServiceImpl implements AiCallbackService {
                     task.setCurrentVersion(task.getCurrentVersion() + 1);
 
                     // Route to the appropriate retry target based on repair target
-                    String retryTarget = VideoTaskStateMachine.getRetryTarget("repair");
+                    String retryTarget = determineRepairTargetStatus(targetType);
                     advanceTask(task, retryTarget);
                 } else {
                     advanceTask(task, "keyframe_configuring");
@@ -398,6 +421,7 @@ public class AiCallbackServiceImpl implements AiCallbackService {
 //状态机推进 (line 193-209)
     private void advanceTask(VideoTaskEntity task, String targetStatus) {
         try {
+            //如果当前状态 → 目标状态 不是合法跳转 → InvalidStateTransitionException
             VideoTaskStateMachine.validateTransition(task.getStatus(), targetStatus);
         } catch (InvalidStateTransitionException e) {
             log.warn("State transition skipped (already advanced?): {} -> {}", task.getStatus(), targetStatus);
@@ -424,6 +448,18 @@ public class AiCallbackServiceImpl implements AiCallbackService {
         Object val = map.get(key);
         if (val instanceof Number n) return n.intValue();
         return null;
+    }
+    //修复不是跳回 repairing 自身，而是跳到具体要重新生成的环节。
+    private String determineRepairTargetStatus(String targetType) {
+        if (targetType == null) {
+            return "keyframe_configuring";
+        }
+        return switch (targetType) {
+            case "keyframe" -> "image_generating";
+            case "video_clip" -> "video_clip_generating";
+            case "render_manifest", "final_video" -> "rendering";
+            default -> "keyframe_configuring";
+        };
     }
 
     private List<String> asStringList(Object value) {
@@ -477,6 +513,7 @@ public class AiCallbackServiceImpl implements AiCallbackService {
         };
     }
 /*product_analysis
+逻辑： 如果任务状态已经"走过"了当前 stage 对应的位置，就认为已经处理过。不需要查数据库有没有重复记录——看任务状态就知道。
 允许重试的状态是 analyzing 和 failed。
 如果当前状态是 analyzing（正在分析）或 failed（失败），说明还没成功完成分析，可以（甚至应该）再次处理 → 返回 false（未处理）。
 如果当前状态是 video_plan、script_generating 等更后面的状态，说明产品分析早就完成并推进到后续流程了，不需要再处理 → 返回 true（已处理，跳过）。 */

@@ -1,4 +1,5 @@
-"""LLM service — OpenAI/Anthropic wrapper with fake provider for dev."""
+"""LLM service — OpenAI/Anthropic wrapper with fake provider for dev.
+这个文件是 AI 调用的统一入口，做一件事：根据配置决定用假数据还是真 AI。"""
 
 import json
 import os
@@ -146,12 +147,268 @@ FIXTURES = {
 }
 
 
+# ── Fashion Creative Loop V1 fixtures (fake mode) ──
+
+FASHION_FIXTURES = {
+    "fashion_asset_analysis": {
+        "productCategory": "Women's Summer Dress",
+        "styleAttributes": ["Casual", "Bohemian", "Floral", "Lightweight"],
+        "visualFeatures": {
+            "colors": ["White", "Blue", "Yellow"],
+            "patterns": ["Floral print", "Polka dot accents"],
+            "materials": ["Cotton", "Linen blend"],
+            "fit": "A-line, knee-length",
+            "occasions": ["Beach", "Brunch", "Vacation", "Shopping"],
+        },
+        "recommendedAngles": ["Front full-body", "Back detail", "Fabric close-up", "Side profile", "Neckline detail"],
+        "assetQualityScore": 82,
+        "missingAngles": ["360-degree spin", "Back zipper close-up"],
+        "lightingNotes": "Natural daylight recommended. Avoid harsh studio flash — the floral pattern reads best in soft, diffused light.",
+        "backgroundRecommendations": ["Beach/coastal", "Garden", "Minimal white wall", "Cafe terrace"],
+        "modelRequirements": "Size S model, 170-175cm. Natural pose, avoid stiff studio poses. Hair up for neckline visibility.",
+    },
+    "reference_video_analysis": {
+        "title": "Summer Collection BTS",
+        "duration": 28.5,
+        "hook": "What I wear in a day: summer edition",
+        "structure": ["hook", "transition"],  # kept minimal for fixture
+        "shots": [
+            {
+                "shotNo": 1, "startTime": 0.0, "endTime": 3.2, "duration": 3.2,
+                "scene": "Model walks into frame, sunny outdoor setting",
+                "action": "Casual walk toward camera, hair flip",
+                "camera": "Medium shot, eye level",
+                "transition": "Quick cut",
+                "subtitle": "Summer day outfit #1",
+                "structureRole": "hook",
+            },
+            {
+                "shotNo": 2, "startTime": 3.2, "endTime": 6.8, "duration": 3.6,
+                "scene": "Full outfit reveal with slow spin",
+                "action": "Slow 360 spin showing dress flow",
+                "camera": "Full body, slight low angle",
+                "transition": "Fade",
+                "subtitle": "Obsessed with this floral print",
+                "structureRole": "body",
+            },
+            {
+                "shotNo": 3, "startTime": 6.8, "endTime": 10.0, "duration": 3.2,
+                "scene": "Close-up of fabric texture and print detail",
+                "action": "Hand runs over fabric, macro shot",
+                "camera": "Macro close-up",
+                "transition": "Quick cut",
+                "subtitle": "Look at the details!",
+                "structureRole": "body",
+            },
+        ],
+        "reusablePatterns": [
+            "Hook → outfit reveal → detail close-up",
+            "Natural outdoor lighting aesthetic",
+            "POV-style text overlays",
+        ],
+        "riskTips": ["Avoid showing identifiable brand logos in background"],
+    },
+    "fashion_plans": {
+        "plans": [
+            {
+                "type": "pain_point_solution",
+                "title": "从没衣服穿到天天被问链接",
+                "hook": "衣柜塞满了但早上还是不知道穿什么？这条裙子是答案",
+                "structure": "痛点→产品→解决→效果→CTA",
+                "reason": "直接命中女性选衣难的痛点，情感共鸣最强",
+                "estimatedDuration": 22,
+                "score": 90,
+                "taskMode": "PRODUCT_CREATIVE",
+                "requiredAssets": ["product_front", "product_back", "product_detail", "scene_reference"],
+                "estimatedCostTier": "moderate",
+            },
+            {
+                "type": "before_after",
+                "title": "普通连衣裙 VS 这条法式茶歇裙",
+                "hook": "同样的身高体重，穿对裙子差这么多？",
+                "structure": "结果预告→对比→产品特写→CTA",
+                "reason": "视觉对比强烈，适合身材修饰类卖点",
+                "estimatedDuration": 20,
+                "score": 85,
+                "taskMode": "PRODUCT_CREATIVE",
+                "requiredAssets": ["product_front", "outfit_reference", "scene_reference"],
+                "estimatedCostTier": "cheap",
+            },
+            {
+                "type": "review",
+                "title": "买了12条夏裙，这条我穿了整整一周",
+                "hook": "一周实测：这条百元连衣裙到底值不值？",
+                "structure": "问题→产品→测试→结果→推荐",
+                "reason": "实测内容在TikTok转化率极高，信任感强",
+                "estimatedDuration": 25,
+                "score": 87,
+                "taskMode": "PRODUCT_CREATIVE",
+                "requiredAssets": ["product_front", "product_detail", "model_reference"],
+                "estimatedCostTier": "moderate",
+            },
+        ]
+    },
+    "fashion_storyboard": {
+        "title": "从没衣服穿到天天被问链接",
+        "hook": "衣柜塞满了但早上还是不知道穿什么？这条裙子是答案",
+        "duration": 22,
+        "caption": "被问了800遍的连衣裙链接在这里！显瘦法式茶歇裙，通勤约会都能穿 #连衣裙 #夏季穿搭",
+        "hashtags": ["#连衣裙", "#夏季穿搭", "#显瘦穿搭", "#法式风格", "#tiktokshop"],
+        "coverText": "被问爆的连衣裙",
+        "musicSuggestion": "轻快法式风背景音乐，BPM 110-120",
+        "shots": [
+            {
+                "shotNo": 1, "duration": 3,
+                "scene": "女生站在衣柜前，一堆衣服散落，表情困扰",
+                "action": "从衣柜里抽出几件衣服又丢回去，摇头叹气",
+                "subtitle": "衣柜满了，但没衣服穿…",
+                "materialType": "ai_video",
+                "prompt": "Young woman standing in front of open closet with clothes scattered, frustrated expression, cinematic lighting, realistic",
+                "negativePrompt": "blurry, low quality, deformed face, watermark, text",
+                "editInstruction": "Quick cuts, handheld camera feel, zoom on frustrated face",
+            },
+            {
+                "shotNo": 2, "duration": 2,
+                "scene": "产品惊艳亮相——裙子挂在简约衣架上",
+                "action": "裙子从模糊变清晰，光线打在裙子上",
+                "subtitle": "直到我发现了它",
+                "materialType": "product_image",
+                "prompt": "",
+                "negativePrompt": "",
+                "editInstruction": "Smooth fade in, golden light sweep across the dress, premium look",
+            },
+            {
+                "shotNo": 3, "duration": 5,
+                "scene": "模特穿上裙子在阳光充足的街景中",
+                "action": "模特自然行走、转身、展示裙摆飘逸",
+                "subtitle": "法式茶歇裙，显瘦又高级",
+                "materialType": "ai_video",
+                "prompt": "Fashion model wearing a-line floral dress walking on sunlit street, dress flowing naturally, confident smile, golden hour lighting",
+                "negativePrompt": "blurry, deformed body, extra limbs, watermark, dark lighting",
+                "editInstruction": "Slow motion at 0.8x, warm color grading, focus on dress movement",
+            },
+            {
+                "shotNo": 4, "duration": 4,
+                "scene": "面料细节和做工特写",
+                "action": "镜头缓慢滑过领口、腰线、裙摆细节",
+                "subtitle": "细节控狂喜！",
+                "materialType": "product_image_motion",
+                "prompt": "",
+                "negativePrompt": "",
+                "editInstruction": "Ken Burns slow zoom on product details, soft focus background",
+            },
+            {
+                "shotNo": 5, "duration": 5,
+                "scene": "同一模特多种场景切换——咖啡厅、公园、海滩",
+                "action": "快速场景切换展示裙子的百搭性",
+                "subtitle": "一条裙子，三种场合",
+                "materialType": "ai_video",
+                "prompt": "Same model wearing same floral dress in three different settings: cafe, park, beach. Seamless transition between scenes",
+                "negativePrompt": "different dress, inconsistent lighting, jumpy transition",
+                "editInstruction": "Match-cut transitions between scenes, keep model position consistent",
+            },
+            {
+                "shotNo": 6, "duration": 3,
+                "scene": "模特对着镜头微笑，指向购物链接",
+                "action": "模特走近镜头，手指向画面下方的链接",
+                "subtitle": "链接在下面，先到先得！",
+                "materialType": "ai_video",
+                "prompt": "Fashion model smiling warmly at camera, pointing down toward shopping link, clean background, well-lit",
+                "negativePrompt": "blurry face, distorted features, scary expression",
+                "editInstruction": "Freeze frame on final smile, text overlay animation for CTA",
+            },
+        ],
+    },
+    "keyframe_prompts": {
+        "prompts": [
+            {"shotNo": 1, "purpose": "first_frame", "prompt": "Young woman in messy bedroom staring at overflowing closet, frustrated morning mood, soft natural light from window, candid shot", "negativePrompt": "blurry, low quality, deformed face, watermark"},
+            {"shotNo": 2, "purpose": "first_frame", "prompt": "Beautiful floral a-line dress on wooden hanger against clean white wall, boutique product photography, soft golden rim light", "negativePrompt": "wrinkled fabric, cluttered background, harsh shadows, watermark"},
+            {"shotNo": 3, "purpose": "first_frame", "prompt": "Fashion model in floral dress walking on cobblestone street, Parisian architecture background, golden hour sunlight, flowing fabric", "negativePrompt": "blurry, deformed body, extra limbs, modern cars, watermark"},
+            {"shotNo": 4, "purpose": "product_detail", "prompt": "Macro close-up of floral cotton fabric texture, visible weave pattern, soft focus depth of field, premium quality feel", "negativePrompt": "blurry, low resolution, synthetic-looking fabric"},
+            {"shotNo": 5, "purpose": "first_frame", "prompt": "Split screen composition: same model in cafe, park, and beach wearing identical floral dress, seamless color grading", "negativePrompt": "different outfits, inconsistent model appearance, harsh transitions"},
+            {"shotNo": 6, "purpose": "reference", "prompt": "Fashion model smiling warmly at camera, clean pastel background, soft beauty lighting, genuine happy expression", "negativePrompt": "blurry face, distorted smile, scary expression, harsh shadows"},
+        ],
+    },
+    "fake_keyframes": {
+        "keyframes": [
+            {"shotNo": 1, "status": "completed", "url": "https://placeholder.cos.ap-guangzhou.myqcloud.com/tk-ai-video/fashion/keyframes/shot1_front.png", "prompt": "Young woman in messy bedroom...", "provider": "fake", "modelName": "fake-v1", "qualityScore": 85, "source": "ai_generated", "imagePurpose": "first_frame"},
+            {"shotNo": 2, "status": "completed", "url": "https://placeholder.cos.ap-guangzhou.myqcloud.com/tk-ai-video/fashion/keyframes/shot2_dress.png", "prompt": "Beautiful floral a-line dress on hanger...", "provider": "fake", "modelName": "fake-v1", "qualityScore": 90, "source": "ai_generated", "imagePurpose": "first_frame"},
+            {"shotNo": 3, "status": "completed", "url": "https://placeholder.cos.ap-guangzhou.myqcloud.com/tk-ai-video/fashion/keyframes/shot3_model.png", "prompt": "Fashion model in floral dress walking...", "provider": "fake", "modelName": "fake-v1", "qualityScore": 88, "source": "ai_generated", "imagePurpose": "first_frame"},
+            {"shotNo": 4, "status": "completed", "url": "https://placeholder.cos.ap-guangzhou.myqcloud.com/tk-ai-video/fashion/keyframes/shot4_detail.png", "prompt": "Macro close-up of floral cotton fabric...", "provider": "fake", "modelName": "fake-v1", "qualityScore": 92, "source": "ai_generated", "imagePurpose": "product_detail"},
+            {"shotNo": 5, "status": "completed", "url": "https://placeholder.cos.ap-guangzhou.myqcloud.com/tk-ai-video/fashion/keyframes/shot5_split.png", "prompt": "Split screen composition...", "provider": "fake", "modelName": "fake-v1", "qualityScore": 80, "source": "ai_generated", "imagePurpose": "first_frame"},
+            {"shotNo": 6, "status": "completed", "url": "https://placeholder.cos.ap-guangzhou.myqcloud.com/tk-ai-video/fashion/keyframes/shot6_cta.png", "prompt": "Fashion model smiling warmly at camera...", "provider": "fake", "modelName": "fake-v1", "qualityScore": 86, "source": "ai_generated", "imagePurpose": "reference"},
+        ]
+    },
+    "video_clip_prompts": {
+        "prompts": [
+            {"shotNo": 1, "prompt": "Young woman in messy bedroom looking frustrated at clothes, candid handheld camera movement, soft morning lighting, 3 seconds", "negativePrompt": "blurry, stabilized, perfect lighting, studio look"},
+            {"shotNo": 2, "prompt": "Dress reveal with golden light sweep animation, fabric gently swaying, premium product showcase, 2 seconds", "negativePrompt": "static image, harsh lighting, wrinkles"},
+            {"shotNo": 3, "prompt": "Model walking confidently on sunlit Parisian street, dress flowing naturally, slow motion, golden hour, 5 seconds", "negativePrompt": "blurry, deformed body, modern elements, dark"},
+            {"shotNo": 4, "prompt": "Ken Burns slow zoom over dress details, fabric texture visible, soft focus background, 4 seconds", "negativePrompt": "static, blurry fabric, synthetic look"},
+            {"shotNo": 5, "prompt": "Match-cut transition between cafe, park, beach scenes with same model and dress, seamless morph effect, 5 seconds", "negativePrompt": "jumpy cuts, different outfits, inconsistent lighting"},
+            {"shotNo": 6, "prompt": "Model smiling warmly, natural expression, clean background, walking toward camera, 3 seconds", "negativePrompt": "distorted face, creepy smile, stiff movement"},
+        ],
+    },
+    "fake_video_clips": {
+        "clips": [
+            {"shotNo": 1, "status": "completed", "url": "https://placeholder.cos.ap-guangzhou.myqcloud.com/tk-ai-video/fashion/clips/shot1.mp4", "prompt": "Young woman in messy bedroom...", "provider": "fake", "modelName": "fake-v1", "duration": 3, "qualityScore": 84, "source": "ai_generated"},
+            {"shotNo": 2, "status": "completed", "url": "https://placeholder.cos.ap-guangzhou.myqcloud.com/tk-ai-video/fashion/clips/shot2.mp4", "prompt": "Dress reveal with golden light...", "provider": "fake", "modelName": "fake-v1", "duration": 2, "qualityScore": 90, "source": "ai_generated"},
+            {"shotNo": 3, "status": "completed", "url": "https://placeholder.cos.ap-guangzhou.myqcloud.com/tk-ai-video/fashion/clips/shot3.mp4", "prompt": "Model walking confidently...", "provider": "fake", "modelName": "fake-v1", "duration": 5, "qualityScore": 87, "source": "ai_generated"},
+            {"shotNo": 4, "status": "completed", "url": "https://placeholder.cos.ap-guangzhou.myqcloud.com/tk-ai-video/fashion/clips/shot4.mp4", "prompt": "Ken Burns slow zoom...", "provider": "fake", "modelName": "fake-v1", "duration": 4, "qualityScore": 91, "source": "ai_generated"},
+            {"shotNo": 5, "status": "completed", "url": "https://placeholder.cos.ap-guangzhou.myqcloud.com/tk-ai-video/fashion/clips/shot5.mp4", "prompt": "Match-cut transition...", "provider": "fake", "modelName": "fake-v1", "duration": 5, "qualityScore": 79, "source": "ai_generated"},
+            {"shotNo": 6, "status": "completed", "url": "https://placeholder.cos.ap-guangzhou.myqcloud.com/tk-ai-video/fashion/clips/shot6.mp4", "prompt": "Model smiling warmly...", "provider": "fake", "modelName": "fake-v1", "duration": 3, "qualityScore": 88, "source": "ai_generated"},
+        ]
+    },
+    "feedback_classification": {
+        "feedbackCategory": "visual_quality",
+        "targetType": "video_clip",
+        "strategy": "regenerate_video_clip",
+        "affectedShots": [3],
+        "repairNotes": "The fabric detail in shot 3 looks blurry — regenerating with higher resolution and better lighting prompt.",
+        "preserveConstraints": {
+            "productDetails": ["floral print", "a-line silhouette", "knee-length"],
+            "styleAttributes": ["Casual", "Bohemian", "Lightweight"],
+        },
+        "estimatedCostTier": "cheap",
+        "requiresUserConfirmation": False,
+    },
+    "repair_plan": {
+        "feedbackCategory": "visual_quality",
+        "targetType": "video_clip",
+        "strategy": "regenerate_video_clip",
+        "affectedShots": [3],
+        "repairNotes": "Executing repair: regenerating video clip for shot 3 with improved prompt emphasizing fabric sharpness and golden hour lighting. One clip affected, cheap cost tier.",
+        "preserveConstraints": {
+            "productDetails": ["floral print", "a-line silhouette", "knee-length"],
+            "styleAttributes": ["Casual", "Bohemian", "Lightweight"],
+        },
+        "newPrompt": "Fashion model walking on sunlit street, floral dress flowing, fabric texture extremely sharp and detailed, golden hour backlight, 5 seconds, cinematic quality, 4K",
+        "estimatedCostTier": "cheap",
+        "requiresUserConfirmation": False,
+    },
+}
+
+
+def get_fashion_fixture(task_type: str) -> dict:
+    """Return a deep copy of a fashion fixture dict (safe to mutate)."""
+    import copy
+    fixture = FASHION_FIXTURES.get(task_type)
+    if fixture is None:
+        raise ValueError(f"No fashion fixture defined for task_type: {task_type}")
+    return copy.deepcopy(fixture)
+
+
 TEXT_TASK_TYPES = {
     "product_analysis",
     "video_plans",
     "script",
     "storyboard",
     "quality_check",
+    # Fashion Creative Loop V1 text tasks
+    "fashion_asset_analysis",
+    "reference_video_analysis",
+    "fashion_plans",
+    "fashion_storyboard",
 }
 
 
@@ -162,6 +419,9 @@ def _text_llm_api_key() -> str:
 def _is_fake_mode(task_type: str) -> bool:
     if task_type == "materials":
         return not (settings.enable_image_generation or settings.enable_video_generation)
+    # M4: Fashion Creative Loop tasks always use fake fixtures
+    if task_type in FASHION_FIXTURES:
+        return True
     return not _text_llm_api_key()
 
 
@@ -170,7 +430,7 @@ async def call_llm(task_type: str, system_prompt: str, user_prompt: str, model: 
     correlation_id = ""  # set from activity context
 
     if _is_fake_mode(task_type):
-        fixture = FIXTURES.get(task_type)
+        fixture = FIXTURES.get(task_type) or FASHION_FIXTURES.get(task_type)
         if fixture is None:
             raise ValueError(f"No fixture defined for task_type: {task_type}")
         log.info("FAKE LLM call: task_type=%s, model=%s", task_type, model)

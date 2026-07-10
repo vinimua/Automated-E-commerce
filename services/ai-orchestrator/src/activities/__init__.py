@@ -10,6 +10,16 @@ from .generate_video_clips import generate_video_clips
 from .check_asset_quality import check_asset_quality
 from .build_render_manifest import build_render_manifest
 from .callback_java import callback_java
+from .analyze_fashion_assets import analyze_fashion_assets
+from .analyze_reference_video import analyze_reference_video
+from .generate_fashion_plans import generate_fashion_plans
+from .generate_fashion_storyboard import generate_fashion_storyboard
+from .generate_keyframe_prompts import generate_keyframe_prompts
+from .fake_generate_keyframes import fake_generate_keyframes
+from .generate_video_clip_prompts import generate_video_clip_prompts
+from .fake_generate_video_clips import fake_generate_video_clips
+from .classify_feedback import classify_feedback
+from .plan_repair import plan_repair
 
 ALL_ACTIVITIES = [
     analyze_product,
@@ -22,4 +32,14 @@ ALL_ACTIVITIES = [
     check_asset_quality,
     build_render_manifest,
     callback_java,
+    analyze_fashion_assets,
+    analyze_reference_video,
+    generate_fashion_plans,
+    generate_fashion_storyboard,
+    generate_keyframe_prompts,
+    fake_generate_keyframes,
+    generate_video_clip_prompts,
+    fake_generate_video_clips,
+    classify_feedback,
+    plan_repair,
 ]

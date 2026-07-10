@@ -15,4 +15,8 @@ public interface KeyframeService {
     VideoTaskStatusResponse confirmKeyframe(UUID taskId, UUID keyframeId, ConfirmKeyframeRequest request, UUID userId);
 
     VideoTaskStatusResponse rejectKeyframe(UUID taskId, UUID keyframeId, ConfirmKeyframeRequest request, UUID userId);
+
+    List<KeyframeResponse> generateKeyframes(UUID taskId, UUID userId);
+
+    List<KeyframeResponse> regenerateKeyframe(UUID taskId, UUID keyframeId, UUID userId);
 }

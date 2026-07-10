@@ -40,6 +40,17 @@ type RequiredQuotaData = {
 export type VideoType = components["schemas"]["VideoType"];
 export type VideoTaskStatus = components["schemas"]["VideoTaskStatus"];
 export type VideoStatus = components["schemas"]["VideoStatus"];
+export type TaskMode = components["schemas"]["TaskMode"];
+export type TaskAsset = components["schemas"]["TaskAsset"] & {
+  assetId: string;
+  taskId: string;
+  assetKind: "image" | "video" | "audio";
+  url: string;
+  assetRole: string;
+  source: "user_upload" | "ai_generated" | "external_url";
+  confirmed: boolean;
+  createdAt: string;
+};
 export type Product = components["schemas"]["Product"] & {
   id: string;
   name: string;
@@ -60,6 +71,7 @@ export type VideoTask = components["schemas"]["VideoTask"] & {
   needSubtitles: boolean;
   needVoiceover: boolean;
   retryCount: number;
+  taskMode: TaskMode;
 };
 export type CreateVideoTaskRequest = components["schemas"]["CreateVideoTaskRequest"];
 export type CreateVideoTaskData = RequiredCreateVideoTaskData;
@@ -119,7 +131,8 @@ export type AdminLogListData = {
 export type ApiResponse<T> = { code: number; message: string; data: T };
 export type PageResponse<T> = { code: number; message: string; data: { items: T[] } & PageMeta };
 
-// V1 freeze
+// Internal/legacy structure hints. Do not use this list as the creation entry.
+// Fashion Creative Loop V1 starts from taskMode; videoType is only an AI/rendering hint.
 export const V1_VIDEO_TYPES: VideoType[] = ["pain_point_solution", "before_after", "review"];
 export const V1_DURATIONS = [15, 20, 25, 30] as const;
 export const PRODUCT_IMAGE_FOLDERS = ["product-images"] as const;
@@ -147,4 +160,14 @@ export const VIDEO_TYPE_LABELS: Record<string, string> = {
   pain_point_solution: "痛点解决方案",
   before_after: "前后对比",
   review: "产品测评",
+  product_showcase: "商品展示",
+  ugc_style: "UGC 风格",
+  tutorial: "教程演示",
+};
+
+export const TASK_MODE_LABELS: Record<string, string> = {
+  PRODUCT_CREATIVE: "商品创意",
+  REFERENCE_STORYBOARD: "参考视频",
+  USER_SCRIPT: "用户脚本",
+  CUSTOM_STORYBOARD: "用户分镜",
 };

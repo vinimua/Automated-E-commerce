@@ -529,6 +529,14 @@ AI 服务所有输出必须满足以下要求：
           "modelName": {
             "type": "string"
           },
+          "source": {
+            "type": "string",
+            "enum": ["user_upload", "existing_asset", "ai_generated"]
+          },
+          "imagePurpose": {
+            "type": "string",
+            "enum": ["first_frame", "last_frame", "reference", "product_detail"]
+          },
           "qualityScore": {
             "type": "integer",
             "minimum": 0,
@@ -1230,6 +1238,9 @@ Pydantic Model + jsonschema 双重校验
   "additionalProperties": false,
   "required": ["feedbackCategory", "targetType", "strategy", "affectedShots"],
   "properties": {
+    "repairEventId": {
+      "type": "string"
+    },
     "feedbackCategory": {
       "type": "string",
       "enum": [
@@ -1445,7 +1456,7 @@ Pydantic Model + jsonschema 双重校验
 | Stage | Callback Direction | nextTaskStatus (success) | nextTaskStatus (failed) |
 |---|---|---|---|
 | `asset_analysis` | Python → Java | `waiting_asset_confirmation` | `failed` |
-| `reference_analysis` | Python → Java | `waiting_asset_confirmation` | `failed` |
+| `reference_analysis` | Python -> Java | `plan_generating` | `failed` |
 | `creative_plan` | Python → Java | `waiting_plan_selection` | `failed` |
 | `product_analysis` | Python → Java | `analysis_completed` | `failed` |
 | `video_plan` | Python → Java | `plan_generated` | `failed` |
@@ -1456,7 +1467,7 @@ Pydantic Model + jsonschema 双重校验
 | `keyframe` | Python → Java | `waiting_image_confirmation` | `failed` |
 | `video_clip` | Python → Java | `waiting_video_clip_confirmation` | `failed` |
 | `qa` | Python → Java | (depends on QA target) | `failed` |
-| `repair` | Python → Java | `repairing` (then transition) | `failed` |
+| `repair` | Python -> Java | target-specific state (`image_generating` / `video_clip_generating` / `rendering` / `keyframe_configuring`) | `failed` |
 
 Callback payload fields per stage:
 

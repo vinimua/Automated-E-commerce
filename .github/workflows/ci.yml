@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  # ── 1. Contract Sync Check ────────────────────────────────────
+  contract-sync:
+    name: Contract Sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run cross-service enum sync check
+        shell: pwsh
+        run: ./scripts/check-contract-sync.ps1
+
+  # ── 2. Java Backend ───────────────────────────────────────────
+  java:
+    name: Java Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tkvideo
+          POSTGRES_PASSWORD: tkvideo123
+          POSTGRES_DB: tk_ai_video
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tkvideo"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Run tests (includes VideoTaskStateMachineTest)
+        run: cd apps/api-java && ./gradlew test
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/tk_ai_video
+          SPRING_DATASOURCE_USERNAME: tkvideo
+          SPRING_DATASOURCE_PASSWORD: tkvideo123
+
+  # ── 3. Python AI Orchestrator ─────────────────────────────────
+  python:
+    name: Python Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          cd services/ai-orchestrator
+          pip install -e ".[dev]"
+
+      - name: Run tests
+        run: |
+          cd services/ai-orchestrator
+          python -m pytest tests/ -v
+
+  # ── 4. Frontend Type Check ────────────────────────────────────
+  frontend:
+    name: Frontend TypeCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: cd apps/web && npm ci
+
+      - name: TypeScript type check
+        run: cd apps/web && npm run type-check

@@ -17,7 +17,6 @@ public class CreateVideoTaskRequest {
     @Min(1)
     private Integer duration;
 
-    @NotNull
     @Pattern(regexp = "pain_point_solution|before_after|review|product_showcase|ugc_style|tutorial")
     private String videoType;
 
@@ -25,6 +24,7 @@ public class CreateVideoTaskRequest {
     private Boolean needVoiceover = false;
 
     // Fashion Creative Loop V1 fields
+    @Pattern(regexp = "PRODUCT_CREATIVE|REFERENCE_STORYBOARD|USER_SCRIPT|CUSTOM_STORYBOARD")
     private String taskMode;
     private String productCategory;
     private Integer shotCount;

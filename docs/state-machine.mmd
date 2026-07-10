@@ -1,0 +1,46 @@
+flowchart TD
+    draft(("<b>草稿</b><br/>draft"))
+
+    draft --> analyzing("<b>AI分析中</b><br/>analyzing")
+    draft --> asset_uploading("<b>上传素材</b><br/>asset_uploading")
+
+    analyzing --> analysis_completed("<b>分析完成</b><br/>analysis_completed")
+    analysis_completed --> plan_generated("<b>方案已生成</b><br/>plan_generated")
+    plan_generated --> waiting_plan_selection("<b>等待选择方案</b><br/>waiting_plan_selection")
+
+    asset_uploading --> asset_analyzing("<b>AI分析素材中</b><br/>asset_analyzing")
+    asset_analyzing --> waiting_asset_confirmation("<b>等待确认素材</b><br/>waiting_asset_confirmation")
+    waiting_asset_confirmation --> reference_analyzing("<b>AI分析参考视频中</b><br/>reference_analyzing")
+    waiting_asset_confirmation --> plan_generating("<b>AI生成方案中</b><br/>plan_generating")
+
+    reference_analyzing --> plan_generating
+    plan_generating --> waiting_plan_selection
+
+    waiting_plan_selection --> script_generating("<b>生成脚本中</b><br/>script_generating")
+    waiting_plan_selection --> storyboard_generating("<b>AI生成分镜中</b><br/>storyboard_generating")
+
+    script_generating --> script_generated("<b>脚本已生成</b><br/>script_generated")
+    script_generated --> material_generating("<b>生成素材中</b><br/>material_generating")
+    material_generating --> material_generated("<b>素材已生成</b><br/>material_generated")
+    material_generated --> rendering("<b>渲染中</b><br/>rendering")
+
+    storyboard_generating --> waiting_storyboard_confirmation("<b>等待确认分镜</b><br/>waiting_storyboard_confirmation")
+    waiting_storyboard_confirmation --> keyframe_configuring("<b>配置关键帧</b><br/>keyframe_configuring")
+    keyframe_configuring --> image_generating("<b>AI生成关键帧中</b><br/>image_generating")
+    keyframe_configuring --> waiting_image_confirmation("<b>等待确认关键帧</b><br/>waiting_image_confirmation")
+    image_generating --> waiting_image_confirmation
+    waiting_image_confirmation --> video_clip_generating("<b>AI生成片段中</b><br/>video_clip_generating")
+    video_clip_generating --> waiting_video_clip_confirmation("<b>等待确认片段</b><br/>waiting_video_clip_confirmation")
+    waiting_video_clip_confirmation --> rendering
+
+    rendering --> checking("<b>质检中</b><br/>checking")
+    rendering --> waiting_final_review("<b>等待最终审核</b><br/>waiting_final_review")
+    checking --> completed("<b>已完成</b><br/>completed")
+    waiting_final_review --> completed
+    waiting_final_review --> repairing("<b>修复中</b><br/>repairing")
+
+    repairing --> keyframe_configuring
+    repairing --> image_generating
+    repairing --> video_clip_generating
+
+    completed --> exported("<b>已导出</b><br/>exported")
