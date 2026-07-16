@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>素材确认 → AI 分析 完整链路</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; background: #f8f9fa; color: #333; padding: 40px; }
+  h1 { text-align: center; margin-bottom: 8px; font-size: 22px; }
+  .subtitle { text-align: center; color: #888; margin-bottom: 36px; font-size: 13px; }
+
+  .flow { max-width: 920px; margin: 0 auto; }
+
+  .step { display: flex; align-items: stretch; margin-bottom: 0; }
+  .step:last-child .connector { display: none; }
+
+  .connector-col { width: 48px; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; border: 3px solid #6c8ebf; background: #fff; flex-shrink: 0; margin-top: 18px; }
+  .dot.start { background: #6c8ebf; }
+  .dot.end { background: #b85450; border-color: #b85450; }
+  .connector { width: 2px; flex: 1; background: #d0d7de; margin: 4px 0; }
+
+  .card { flex: 1; margin-bottom: 10px; border-radius: 8px; border: 1px solid #e8e8e8; overflow: hidden; background: #fff; }
+  .card-header { padding: 8px 14px; font-size: 11px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+  .card-body { padding: 10px 14px; font-size: 13px; line-height: 1.7; }
+  .card-body code { background: #f0f0f0; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+  .card-body .arrow { color: #888; margin: 0 4px; }
+  .file-link { display: inline-block; margin-top: 6px; font-size: 11px; color: #6c8ebf; text-decoration: none; }
+  .file-link:hover { text-decoration: underline; }
+
+  .badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+  .badge-fe { background: #e3f2fd; color: #1565c0; }
+  .badge-java { background: #fff3e0; color: #e65100; }
+  .badge-python { background: #e8f5e9; color: #2e7d32; }
+  .badge-ai { background: #f3e5f5; color: #7b1fa2; }
+  .badge-db { background: #fce4ec; color: #c62828; }
+  .badge-temporal { background: #e0f7fa; color: #00695c; }
+
+  .tag-row { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+  .tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: #f5f5f5; color: #666; }
+  .tag.http { background: #e8f5e9; color: #2e7d32; }
+  .tag.sql { background: #fce4ec; color: #c62828; }
+  .tag.call { background: #fff3e0; color: #e65100; }
+
+  .data-block { background: #fafafa; border-radius: 6px; padding: 8px 10px; margin-top: 6px; font-size: 11px; font-family: 'SF Mono', 'Consolas', monospace; color: #555; border: 1px solid #eee; line-height: 1.6; }
+  .data-block .key { color: #7b1fa2; }
+  .data-block .val { color: #2e7d32; }
+  .data-block .str { color: #c62828; }
+
+  .code-block { background: #fafafa; border-radius: 6px; padding: 10px 14px; margin-top: 6px; font-size: 11px; font-family: 'SF Mono', 'Consolas', 'Cascadia Code', monospace; color: #555; border: 1px solid #eee; line-height: 1.65; overflow-x: auto; white-space: pre; tab-size: 2; }
+  .code-block .kw { color: #7b1fa2; font-weight: 600; }
+  .code-block .fn { color: #1565c0; }
+  .code-block .str { color: #c62828; }
+  .code-block .cm { color: #999; font-style: italic; }
+  .code-block .val { color: #2e7d32; }
+
+  /* TOC */
+  .toc { max-width: 920px; margin: 0 auto 32px; padding: 20px 24px; background: #fff; border-radius: 8px; border: 1px solid #e8e8e8; }
+  .toc h3 { font-size: 14px; margin-bottom: 10px; color: #555; }
+  .toc a { display: block; padding: 4px 0; font-size: 13px; color: #6c8ebf; text-decoration: none; border-bottom: 1px dotted #eee; }
+  .toc a:hover { color: #2e5d8a; text-decoration: underline; }
+  .toc .toc-section { font-weight: 600; color: #333; font-size: 14px; margin-top: 8px; padding: 6px 0 2px; border-bottom: 2px solid #ddd; }
+  .toc .toc-sub { padding-left: 16px; }
+</style>
+</head>
+<body>
+
+<h1>素材确认 → AI 分析 完整链路</h1>
+<p class="subtitle">从前端按钮点击到 AI 分析结果返回前端展示</p>
+
+<div class="toc">
+  <h3>📑 目录</h3>
+  <a href="#sec-main" class="toc-section">素材确认 → AI 分析（主链路）</a>
+  <a href="#sec-main" class="toc-sub">Step 1-4 前端 → Java 确认</a>
+  <a href="#sec-main" class="toc-sub">Step 5-6 Python API → Temporal 工作流</a>
+  <a href="#sec-main" class="toc-sub">Step 7-9 回调 → 前端展示</a>
+  <a href="#sec-gen" class="toc-section">一、生成新图 — 完整链路</a>
+  <a href="#sec-regenerate" class="toc-section">二、按反馈重新生成 — 完整链路</a>
+  <a href="#sec-confirm" class="toc-section">三、确认时，哪些图被传给 AI 分析？</a>
+</div>
+
+<div class="flow" id="sec-main">
+
+  <!-- Step 1 -->
+  <div class="step">
+    <div class="connector-col"><div class="dot start"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#e3f2fd;"><span>❶ 前端：用户点击确认按钮</span><span class="badge badge-fe">Frontend</span></div>
+      <div class="card-body">
+        用户点击「<b>确认商品素材并开始 AI 分析</b>」
+        <div class="tag-row">
+          <span class="tag http">POST</span>
+          <span class="tag">/api/video-tasks/{taskId}/assets/confirm</span>
+          <span class="tag">Body: {}</span>
+        </div>
+        <a class="file-link" href="Automated E-commerce/apps/web/src/app/video-tasks/[id]/assets/page.tsx" target="_blank">📄 Automated E-commerce/apps/web/.../assets/page.tsx</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#fff3e0;"><span>❷ Java Controller — confirm 端点</span><span class="badge badge-java">Java</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/apps/api-java/src/main/java/com/tk/ai/video/module/taskasset/controller/TaskAssetController.java#L83" target="_blank">📄 taskasset/controller/TaskAssetController.java:83-90</a>
+        <div class="code-block">
+<span class="kw">@PostMapping</span>(<span class="str">"/api/video-tasks/{taskId}/assets/confirm"</span>)
+<span class="kw">public</span> ApiResponse&lt;VideoTaskStatusResponse&gt; <span class="fn">confirmAssets</span>(
+        <span class="kw">@PathVariable</span> UUID taskId,
+        <span class="kw">@RequestBody</span> ConfirmAssetsRequest request,
+        <span class="kw">@AuthenticationPrincipal</span> UserPrincipal principal
+) {
+    <span class="kw">return</span> ApiResponse.ok(taskAssetService.confirmAssets(taskId, request, principal.getUserId()));
+}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3 -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#fff3e0;"><span>❸ Java Service — 确认 + 触发 AI（核心）</span><span class="badge badge-java">Java</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/apps/api-java/src/main/java/com/tk/ai/video/module/taskasset/service/impl/TaskAssetServiceImpl.java#L274" target="_blank">📄 taskasset/service/impl/TaskAssetServiceImpl.java:274-336</a>
+        <div class="code-block">
+<span class="kw">@Transactional</span>
+<span class="kw">public</span> VideoTaskStatusResponse <span class="fn">confirmAssets</span>(...) {
+    <span class="cm">// 1. 标记确认: markRequestedAssetsConfirmed() — 指定 assetIds 则只确认指定，否则全部确认</span>
+    markRequestedAssetsConfirmed(request, assets);
+
+    <span class="cm">// 2. 首次确认 (status == "asset_uploading")</span>
+    <span class="kw">if</span> (<span class="str">"asset_uploading"</span>.equals(task.getStatus())) {
+        <span class="cm">// a. selectAssetsForAnalysis() → 优先取 AI 生成/编辑图，fallback 原图</span>
+        List&lt;TaskAssetEntity&gt; assetsForAnalysis = selectAssetsForAnalysis(confirmedAssets);
+        <span class="cm">// b. task.status: asset_uploading → asset_analyzing, progress = 15</span>
+        task.setStatus(<span class="str">"asset_analyzing"</span>);
+        task.setProgress(15);
+        videoTaskMapper.updateById(task);
+        <span class="cm">// c. 组装上下文 + 发到 Python AI</span>
+        Map&lt;String, Object&gt; productContext = creativeContextAssembler.assemble(task);
+        aiServiceClient.startAssetAnalysis(
+            task.getId(), task.getProductId(), task.getUserId(),
+            productContext,                              <span class="cm">// CreativeContextAssembler 组装</span>
+            assetsForAnalysis.stream().map(this::toAiAsset).toList()
+        );
+    }
+
+    <span class="cm">// 3. 二次确认 (status == "waiting_asset_confirmation")</span>
+    <span class="kw">if</span> (<span class="str">"waiting_asset_confirmation"</span>.equals(task.getStatus())) {
+        String nextStatus = determineNextStatus(task);   <span class="cm">// reference_analyzing 或 plan_generating</span>
+        task.setStatus(nextStatus);
+        videoTaskMapper.updateById(task);
+        <span class="cm">// 推進到 reference_analyzing → AI 分析參考視頻</span>
+        <span class="cm">// 或 plan_generating → AI 生成創意方案</span>
+    }
+}</div>
+      </div>
+    </div>
+  </div>
+
+<!-- Step 4 -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#fff3e0;"><span>❹ Java：AiServiceClient.startAssetAnalysis()</span><span class="badge badge-java">Java</span></div>
+      <div class="card-body">
+        <b>fireAndForget</b> — 发完即走，不等结果
+        <div class="tag-row">
+          <span class="tag http">HTTP POST</span>
+          <span class="tag">http://localhost:8000/ai/workflows/asset-analysis</span>
+        </div>
+        <div class="data-block">
+<span class="key">"taskId"</span>:       <span class="str">"ffdd7bcf-..."</span>
+<span class="key">"productId"</span>:    <span class="str">"bd208425-..."</span>
+<span class="key">"userId"</span>:       <span class="str">"46de374a-..."</span>
+<span class="key">"correlationId"</span>: <span class="str">"abc-123"</span>
+<span class="key">"productContext"</span>: { <span class="val">name, description, imageUrls, ...</span> }
+<span class="key">"assets"</span>:        [{ <span class="val">type, role, url</span> }, ...]</div>
+        <a class="file-link" href="Automated E-commerce/apps/api-java/src/main/java/com/tk/ai/video/common/AiServiceClient.java#L134" target="_blank">📄 common/AiServiceClient.java:134</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 5 -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#e8f5e9;"><span>❺ Python：FastAPI endpoint → 启动 Temporal 工作流</span><span class="badge badge-python">Python</span></div>
+      <div class="card-body">
+        <code>POST /ai/workflows/asset-analysis</code> <span class="arrow">→</span> <code>start_asset_analysis(req, request)</code>
+        <div class="code-block"><span class="cm"># api/workflows.py:72-98</span>
+<span class="kw">async def</span> <span class="fn">start_asset_analysis</span>(req: AssetAnalysisRequest, request: Request):
+    client = getattr(request.app.state, <span class="str">"temporal_client"</span>, None)
+    <span class="kw">if</span> client <span class="kw">is</span> None:
+        <span class="kw">raise</span> HTTPException(status_code=503, detail=<span class="str">"Temporal service unavailable"</span>)
+
+    workflow_id = <span class="str">f"fa-{req.taskId}"</span>
+    <span class="kw">await</span> client.start_workflow(
+        <span class="str">"FashionAnalysisWorkflow"</span>,
+        args=[
+            str(req.taskId),                           <span class="cm">// "ffdd7bcf-..."</span>
+            {
+                <span class="str">"productContext"</span>: req.productContext,    <span class="cm">// 商品名称、描述、市场、userRequest</span>
+                <span class="str">"assets"</span>: req.assets                  <span class="cm">// 素材类型、角色、URL</span>
+            },
+            <span class="str">"asset"</span>,                                 <span class="cm">// analysis_type</span>
+            <span class="str">""</span>                                      <span class="cm">// reference_url (空)</span>
+        ],
+        id=workflow_id,
+        task_queue=<span class="str">"ai-video-task-queue"</span>,
+    )
+    <span class="kw">return</span> WorkflowTriggerResponse(workflow_id, <span class="str">"started"</span>, ...)</div>
+        <div class="arrow" style="margin-top:6px;">→ 返回 { workflow_id, status: "started" } 给 Java，Java 继续执行（不等待）</div>
+        <a class="file-link" href="Automated E-commerce/services/ai-orchestrator/src/api/workflows.py#L72" target="_blank">📄 api/workflows.py:72-98</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 5.5 — Temporal Workflow -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#e0f7fa;"><span>❺½ Temporal 工作流 — 编排 Activity</span><span class="badge badge-temporal">Temporal</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/services/ai-orchestrator/src/workflows/fashion_analysis.py#L46" target="_blank">📄 workflows/fashion_analysis.py:46-77</a>
+        <div class="code-block">
+<span class="cm"># 执行分析 activity（超时 5 分钟，最多 3 次重试）</span>
+asset_analysis = <span class="kw">await</span> workflow.execute_activity(
+    <span class="str">"analyze_fashion_assets"</span>,
+    args=[task_id, product_context],
+    start_to_close_timeout=timedelta(minutes=<b>5</b>),
+)
+
+<span class="cm"># 成功 → 回调 Java</span>
+<span class="kw">await</span> workflow.execute_activity(<span class="str">"callback_java"</span>, build_callback_payload(
+    task_id, <span class="str">"asset_analysis"</span>, <span class="str">"success"</span>, <span class="str">"waiting_asset_confirmation"</span>,
+    fashionAssetAnalysis=asset_analysis,
+))</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 6 -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#e0f7fa;"><span>❻ Temporal Worker → FashionAnalysisWorkflow 执行</span><span class="badge badge-temporal">Temporal</span></div>
+      <div class="card-body">
+        Temporal Server 放入 <code>ai-video-task-queue</code> → Python Worker 领取 → 执行两个 Activity
+
+        <div style="margin-top:10px;"><b>Activity 1：</b><code>analyze_fashion_assets(taskId, product_context)</code></div>
+        <div class="code-block"><span class="cm"># activities/analyze_fashion_assets.py</span>
+<span class="kw">async def</span> <span class="fn">analyze_fashion_assets</span>(task_id, product_context):
+    result = <span class="kw">await</span> call_llm(
+        <span class="str">"fashion_asset_analysis"</span>,
+        system_prompt,
+        user_prompt
+    )
+    <span class="cm">→ HTTP POST https://api.deepseek.com/chat/completions</span>
+    <span class="cm">→ model: deepseek-v4-pro, tokens: ~150 in / ~900 out</span>
+
+    <span class="cm">→ 返回:</span>
+    {
+        <span class="str">"analysisText"</span>:       <span class="str">"这是一个40oz旅行杯，不锈钢材质..."</span>,
+        <span class="str">"analyzedAssetIds"</span>:   [<span class="str">"77abb7ce-..."</span>],
+        <span class="str">"model"</span>:              <span class="str">"deepseek-v4-pro"</span>,
+        <span class="str">"analyzedAt"</span>:          <span class="str">"2026-07-13T12:00:00Z"</span>
+    }</div>
+        <a class="file-link" href="Automated E-commerce/services/ai-orchestrator/src/activities/analyze_fashion_assets.py" target="_blank">📄 activities/analyze_fashion_assets.py</a>
+
+        <!-- 数据流转说明 -->
+        <div style="margin-top:14px; padding:12px 14px; background:#fff9e6; border-radius:6px; border:1px dashed #d6b656;">
+          <div style="font-size:12px; font-weight:600; color:#8b6914; margin-bottom:8px;">🔄 结果如何传回 Java？（Temporal 只负责编排，不负责传结果）</div>
+          <div style="font-size:12px; line-height:2;">
+            <b>① Activity 1 返回 dict</b> → Workflow 拿到 <code>asset_analysis</code> 变量<br>
+            <b>② Workflow 调 <code>build_callback_payload()</code></b> → 把结果塞进 JSON payload<br>
+            <b>③ Activity 2 <code>callback_java(payload)</code></b> → 调 <code>send_callback()</code> → <b>HTTP POST</b> 到 Java
+          </div>
+          <div class="code-block" style="margin-top:8px; background:#fff; border-color:#e8d5a3;">
+<span class="cm"># 完整数据流：Activity 1 → Activity 2 → HTTP → Java</span>
+
+<span class="cm"># ── Step 1: Activity 1 返回 dict ──</span>
+<span class="fn">analyze_fashion_assets</span>(task_id, product_context)
+       │
+       └──→ <span class="kw">return</span> { analysisText, analyzedAssetIds, model, analyzedAt }
+            <span class="cm"># 返回值被 Temporal 自动序列化，传给 Workflow</span>
+
+<span class="cm"># ── Step 2: Workflow 拿到结果，构造 payload ──</span>
+<span class="kw">asset_analysis</span> = await workflow.execute_activity(<span class="str">"analyze_fashion_assets"</span>, ...)
+                       <span class="cm"># ↑ Temporal 将返回值反序列化赋给这个变量</span>
+
+<span class="fn">build_callback_payload</span>(
+    task_id, <span class="str">"asset_analysis"</span>, <span class="str">"success"</span>, <span class="str">"waiting_asset_confirmation"</span>,
+    fashionAssetAnalysis=asset_analysis   <span class="cm"># ← 把结果拼进 HTTP body</span>
+)
+
+<span class="cm"># ── Step 3: Activity 2 本体 — 字符串名字 → 实际函数 ──</span>
+Workflow 调 <span class="str">"callback_java"</span> 这个<u>字符串</u>
+       │
+       ▼
+<span class="cm"># activities/__init__.py — 注册表：字符串 → 函数</span>
+ALL_ACTIVITIES = [
+    ...,
+    callback_java,         <span class="cm"># ← from .callback_java import callback_java</span>
+]
+Temporal Worker 启动时加载此列表 → 知道 <span class="str">"callback_java"</span> 对应哪个函数
+       │
+       ▼
+<span class="cm"># activities/callback_java.py — Activity 2 本体</span>
+@activity.defn                         <span class="cm"># ← Temporal 装饰器</span>
+async def <span class="fn">callback_java</span>(payload: dict) -> str:
+    cb = CallbackPayload.<span class="fn">model_validate</span>(payload)   <span class="cm"># ① Pydantic 校验</span>
+    success = await <span class="fn">send_callback</span>(cb)             <span class="cm"># ② 调 HTTP 层 ↓</span>
+       │
+       ▼
+<span class="cm"># services/callback_service.py — 纯 HTTP 工具层</span>
+async def <span class="fn">send_callback</span>(payload):
+    url = <span class="str">f"http://localhost:8099/api/ai-callbacks/{payload.taskId}"</span>
+    response = await httpx.AsyncClient().<span class="fn">post</span>(url, json=body, headers={...})
+    <span class="cm"># 重试 3 次，间隔 2s→4s→6s，全部失败抛 RuntimeError</span>
+       │
+       ▼
+  POST http://localhost:8099/api/ai-callbacks/{taskId}
+       │
+       ▼
+  Java AiCallbackServiceImpl.handleCallback()
+  <span class="cm"># 接收 JSON → 解析 stage → 写 DB → 推进状态</span></div>
+        </div>
+
+        <div style="margin-top:10px;"><b>Activity 2：</b><code>callback_java(payload)</code></div>
+        <div class="code-block"><span class="cm"># workflows/fashion_analysis.py:82-90</span>
+<span class="kw">await</span> workflow.execute_activity(
+    <span class="str">"callback_java"</span>,
+    build_callback_payload(
+        task_id,
+        <span class="str">"asset_analysis"</span>,
+        <span class="str">"success"</span>,
+        <span class="str">"waiting_asset_confirmation"</span>,
+        fashionAssetAnalysis=asset_analysis,      <span class="cm">// 上面 Activity 1 的完整结果</span>
+    ),
+    start_to_close_timeout=timedelta(seconds=30),
+    retry_policy=callback_retry,
+)</div>
+        <a class="file-link" href="Automated E-commerce/services/ai-orchestrator/src/workflows/fashion_analysis.py#L82" target="_blank">📄 workflows/fashion_analysis.py:82-90</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 7 -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#e8f5e9;"><span>❼ Python → Java：callback HTTP</span><span class="badge badge-python">Python</span></div>
+      <div class="card-body">
+        <div class="tag-row">
+          <span class="tag http">HTTP POST</span>
+          <span class="tag">http://localhost:8099/api/ai-callbacks/{taskId}</span>
+          <span class="tag">Header: X-Internal-Service-Token</span>
+        </div>
+        <div class="code-block"><span class="cm"># services/callback_service.py:15-57  send_callback()</span>
+{
+  <span class="str">"taskId"</span>:          <span class="str">"ffdd7bcf-..."</span>,
+  <span class="str">"schemaVersion"</span>:   <span class="str">"1.0.0"</span>,
+  <span class="str">"stage"</span>:           <span class="str">"asset_analysis"</span>,
+  <span class="str">"status"</span>:          <span class="str">"success"</span>,
+  <span class="str">"nextTaskStatus"</span>:  <span class="str">"waiting_asset_confirmation"</span>,
+  <span class="str">"fashionAssetAnalysis"</span>: {
+    <span class="str">"analysisText"</span>:     <span class="str">"这是一个40oz旅行杯..."</span>,
+    <span class="str">"analyzedAssetIds"</span>: [<span class="str">"77abb7ce-..."</span>],
+    <span class="str">"model"</span>:            <span class="str">"deepseek-v4-pro"</span>,
+    <span class="str">"analyzedAt"</span>:        <span class="str">"2026-07-13T..."</span>
+  }
+}</div>
+        <div style="margin-top:6px; font-size:11px; color:#888;">
+          重试策略（<code>callback_service.py:11-12</code>）：<code>MAX_RETRIES=3</code>，间隔 <code>2s → 4s → 6s</code>
+        </div>
+        <a class="file-link" href="Automated E-commerce/services/ai-orchestrator/src/services/callback_service.py" target="_blank">📄 services/callback_service.py</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 8 -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#fff3e0;"><span>❽ Java：AiCallbackServiceImpl.handleCallback()</span><span class="badge badge-java">Java</span></div>
+      <div class="card-body">
+        <b>幂等检查：</b><code>isStageAlreadyProcessed("asset_analysis", "asset_analyzing")</code> → false ✅<br>
+        <b>状态路由：</b><code>status === "success"</code> → <code>handleSuccess()</code>
+        <div class="arrow">→</div>
+        <code>case "asset_analysis":</code>
+        <div class="code-block"><span class="cm">// AiCallbackServiceImpl.java case "asset_analysis"</span>
+<span class="kw">if</span> (request.getFashionAssetAnalysis() != <span class="kw">null</span>) {
+    Map&lt;String, Object&gt; a = request.getFashionAssetAnalysis();
+    ProductEntity product = productMapper.selectById(task.getProductId());
+    <span class="kw">if</span> (product != <span class="kw">null</span>) {
+        product.setDescription((String) a.get(<span class="str">"analysisText"</span>));
+        productMapper.updateById(product);
+    }
+}
+advanceTask(task, <span class="str">"waiting_asset_confirmation"</span>);
+<span class="cm">// → validateTransition("asset_analyzing", "waiting_asset_confirmation") ✅</span></div>
+        <div class="tag-row" style="margin-top:6px;">
+          <span class="tag sql">UPDATE video_tasks SET status='waiting_asset_confirmation'</span>
+          <span class="tag sql">UPDATE products SET description='这是一个40oz旅行杯...'</span>
+        </div>
+        <a class="file-link" href="Automated E-commerce/apps/api-java/src/main/java/com/tk/ai/video/module/callback/service/impl/AiCallbackServiceImpl.java" target="_blank">📄 callback/service/impl/AiCallbackServiceImpl.java</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 9 -->
+  <div class="step">
+    <div class="connector-col"><div class="dot end"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#e3f2fd;"><span>❾ 前端：轮询展示结果</span><span class="badge badge-fe">Frontend</span></div>
+      <div class="card-body">
+        <b>每 5 秒轮询：</b><code>GET /api/video-tasks/{taskId}</code><br>
+        检测到 <code>status === "waiting_asset_confirmation"</code>
+        <div class="arrow">→</div>
+        展示分析结果卡片：
+        <div class="data-block">
+✅ <b>AI 分析完成</b>
+
+模型: <span class="val">deepseek-v4-pro</span>
+分析时间: <span class="val">2026-07-13T12:00:00Z</span>
+
+<span class="val">「这是一个40oz旅行杯，不锈钢材质，双层真空保温结构。
+当前素材仅展示了产品正面，缺少背面、侧面、使用场景和细节图。
+建议补充产品背面图、模特手持使用图、以及杯盖/吸管细节图。
+避免与一般运动水壶混淆，突出"旅行杯"的差异化卖点。」</span></div>
+        <div style="margin-top:8px; font-size:12px;">
+          用户可：<b>补充素材</b> 或 <b>再次确认</b> → 进入 plan_generating / reference_analyzing
+        </div>
+        <a class="file-link" href="Automated E-commerce/apps/web/src/app/video-tasks/[id]/assets/page.tsx" target="_blank">📄 Automated E-commerce/apps/web/.../assets/page.tsx</a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================================================ -->
+<!-- 新模块一：生成/编辑新商品图 完整链路 -->
+<!-- ============================================================ -->
+<div style="max-width:920px; margin:60px auto 0;">
+  <h2 id="sec-gen" style="border-bottom: 3px solid #6c8ebf; padding-bottom: 8px; margin-bottom: 24px;">一、生成新图 — 完整链路</h2>
+</div>
+<div class="flow">
+
+  <!-- G1: 前端 UI -->
+  <div class="step">
+    <div class="connector-col"><div class="dot start"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#e8f5e9;"><span>G1 前端：用户输入 prompt</span><span class="badge badge-fe">Frontend</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/apps/web/src/app/video-tasks/[id]/assets/page.tsx#L469" target="_blank">📄 assets/page.tsx:469-497</a>
+        <div class="code-block">
+<span class="cm">// 用户输入 prompt 并点击按钮</span>
+&lt;textarea value={imagePrompt} placeholder="例如：在原有黑色 T 恤背面加一个大面积蝴蝶图案..." /&gt;
+&lt;button onClick={handleGenerateImage}&gt;生成/编辑新图&lt;/button&gt;</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- G2: 前端 POST -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#e8f5e9;"><span>G2 前端：handleGenerateImage()</span><span class="badge badge-fe">Frontend</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/apps/web/src/app/video-tasks/[id]/assets/page.tsx#L220" target="_blank">📄 assets/page.tsx:220-251</a>
+        <div class="code-block">
+<span class="kw">async</span> <span class="fn">handleGenerateImage</span>() {
+    <span class="kw">await</span> apiRequest(<span class="str">`/api/video-tasks/${id}/assets/generate-image`</span>, {
+        method: <span class="str">"POST"</span>,
+        body: {
+            prompt: <span class="str">"在黑色 T 恤背面加蝴蝶图案，保持版型不变"</span>,
+            sourceAssetIds: sourceImageAssets.map(a =&gt; a.assetId),  <span class="cm">// 所有原始图片</span>
+            assetRole: <span class="str">"image_variant"</span>,
+        },
+    });
+    setAssets(res.data.assets);  <span class="cm">// 刷新列表</span>
+}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- G3: Java Controller -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#fff3e0;"><span>G3 Java Controller</span><span class="badge badge-java">Java</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/apps/api-java/src/main/java/com/tk/ai/video/module/taskasset/controller/TaskAssetController.java#L62" target="_blank">📄 TaskAssetController.java:62-69</a>
+        <div class="code-block">
+<span class="kw">@PostMapping</span>(<span class="str">"/api/video-tasks/{taskId}/assets/generate-image"</span>)
+<span class="kw">public</span> ApiResponse&lt;TaskAssetListResponse&gt; <span class="fn">generateAssetImage</span>(...) {
+    <span class="kw">return</span> ApiResponse.ok(taskAssetService.generateAssetImage(taskId, request, userId));
+}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- G4: Java Service -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#fff3e0;"><span>G4 Java Service — generateAssetImage()</span><span class="badge badge-java">Java</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/apps/api-java/src/main/java/com/tk/ai/video/module/taskasset/service/impl/TaskAssetServiceImpl.java#L109" target="_blank">📄 TaskAssetServiceImpl.java:109-137</a>
+        <div class="code-block">
+<span class="kw">public</span> List&lt;TaskAssetResponse&gt; <span class="fn">generateAssetImage</span>(...) {
+    List&lt;TaskAssetEntity&gt; sourceAssets = selectSourceAssetsForGeneration(request, allAssets);
+
+    metadata.put(<span class="str">"generationRound"</span>, <span class="val">1</span>);  <span class="cm">// 首次生成</span>
+
+    <span class="kw">return</span> generateAndSaveAssetImage(task, userId, prompt,
+            <span class="str">"image_variant"</span>, sourceAssets, metadata,
+            Map.of());  <span class="cm">// generationContext = 空 Map</span>
+}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- G5: Java HTTP -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#fff3e0;"><span>G5 Java AiServiceClient</span><span class="badge badge-java">Java</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/apps/api-java/src/main/java/com/tk/ai/video/common/AiServiceClient.java#L159" target="_blank">📄 AiServiceClient.java:159-186</a>
+        <div class="code-block">
+<span class="cm">// 同步 HTTP POST — 等待响应</span>
+payload.put(<span class="str">"prompt"</span>, <span class="str">"在黑色 T 恤背面加蝴蝶图案..."</span>);
+payload.put(<span class="str">"productContext"</span>, { name, description, ... });
+payload.put(<span class="str">"sourceAssets"</span>, [{ assetId, role, url }, ...]);
+
+Map response = restClient.post()
+    .uri(<span class="str">"/ai/assets/generate-image"</span>).body(payload).retrieve().body(Map.class);</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- G6: Python endpoint + prompt -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#e8f5e9;"><span>G6 Python：generate_asset_image() 端点 + 构造 prompt</span><span class="badge badge-python">Python</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/services/ai-orchestrator/src/api/asset_images.py#L75" target="_blank">📄 asset_images.py:75-111</a>
+        <div class="code-block">
+<span class="kw">@router.post</span>(<span class="str">"/assets/generate-image"</span>)
+<span class="kw">async def</span> <span class="fn">generate_asset_image</span>(req: AssetImageGenerationRequest):
+    provider = get_image_provider()
+    prompt = <span class="fn">_build_asset_image_prompt</span>(req)       <span class="cm">// 拼完整中文 prompt</span>
+    negative_prompt = <span class="str">"watermark, logo hallucination, unreadable text, "</span>
+                      <span class="str">"extra limbs, distorted garment, low quality, blurry"</span>
+
+    result = <span class="kw">await</span> provider.generate(
+        prompt=prompt,
+        negative_prompt=negative_prompt,
+        purpose=req.assetRole <span class="kw">or</span> <span class="str">"image_variant"</span>,
+        source_assets=req.sourceAssets,         <span class="cm">// 原始图片 [{assetId, role, url}]</span>
+        size=<span class="str">"1024x1792"</span>,
+        previous_result=req.previousResult,     <span class="cm">// None（首次生成）</span>
+        feedback=req.feedback,                  <span class="cm">// None（首次生成）</span>
+        previous_prompt=req.previousPrompt,     <span class="cm">// None（首次生成）</span>
+    )
+    <span class="kw">return</span> AssetImageGenerationResponse(url=result[<span class="str">"url"</span>], ...)</div>
+
+        <div style="margin-top:14px; padding:10px 12px; background:#f5f5f5; border-radius:4px; font-size:12px;">
+          <b>⬆ 调 provider.generate() 时传入的参数：</b><br>
+          <code>prompt</code> ← <code>_build_asset_image_prompt(req)</code> 的返回值（下方详述）<br>
+          <code>negative_prompt</code> ← 硬编码："watermark, logo hallucination, unreadable text, extra limbs, distorted garment, low quality, blurry"<br>
+          <code>source_assets</code> ← Java 传来的 <code>req.sourceAssets</code>（原始商品图列表）<br>
+          <code>previous_result / feedback / previous_prompt</code> ← 首次生成为 <code>None</code>，重新生成时有值<br>
+          <code>size</code> ← 固定 <code>"1024x1792"</code>（竖版 9:16）
+        </div>
+
+        <div style="margin-top:14px;"><b>_build_asset_image_prompt() 构造的完整 prompt：</b></div>
+        <a class="file-link" href="Automated E-commerce/services/ai-orchestrator/src/api/asset_images.py#L17" target="_blank">📄 asset_images.py:17-72</a>
+        <div class="code-block">
+<span class="kw">def</span> <span class="fn">_build_asset_image_prompt</span>(req):
+    <span class="cm">// ❶ 列出参考素材 URL</span>
+    source_lines = []
+    <span class="kw">for</span> asset <span class="kw">in</span> req.sourceAssets:
+        source_lines.append(<span class="str">f"- assetId={id}, role={role}, source={source}, url={url}"</span>)
+
+    <span class="cm">// ❷ 取商品背景</span>
+    product_name = req.productContext[<span class="str">"productProfile"</span>][<span class="str">"name"</span>]
+    product_description = req.productContext[<span class="str">"productProfile"</span>][<span class="str">"description"</span>]
+
+    <span class="cm">// ❸ 构建迭代上下文（首次生成为空）</span>
+    revision_lines = []
+    <span class="kw">if</span> req.previousPrompt:
+        revision_lines.append(<span class="str">f"- 上一轮生成要求：{req.previousPrompt}"</span>)
+    <span class="kw">if</span> req.previousResult.url:
+        revision_lines.append(<span class="str">f"- 上一轮生成结果：{req.previousResult.url}"</span>)
+    <span class="kw">if</span> req.feedback:
+        revision_lines.append(<span class="str">f"- 本轮用户反馈：{req.feedback}"</span>)
+    revision_block = <span class="str">"\n"</span>.join(revision_lines) <span class="kw">or</span> <span class="str">"- 首次生成，不是迭代修改"</span>
+
+    <span class="cm">// ❹ 拼完整 prompt</span>
+    <span class="kw">return</span> <span class="str">f"""
+你是电商服装商品图生成/编辑模型。
+
+你的任务：
+根据参考素材、商品背景和用户要求，生成一张可作为"当前商品新确认图"的候选图。
+
+用户当前要求：
+{req.prompt}
+
+迭代上下文：
+{revision_block}
+
+商品背景：
+- name: {product_name}
+- description: {product_description}
+
+参考素材：
+{source_lines}
+
+生成/编辑规则：
+1. 保持参考素材中可见的商品主体一致，除非用户明确要求修改某个元素。
+2. 如果用户要求添加/替换图案，只修改指定区域；不要随意改变版型、主色、领型、袖型、衣长、比例和材质视觉。
+3. 如果这是迭代生成，优先保留上一轮用户没有否定的部分，只修正本轮反馈中提到的问题。
+4. 不要添加水印、乱码文字、虚构品牌标识、夸张功能效果或素材里不存在的结构。
+5. 输出适合电商短视频前置素材分析的清晰商品图：主体明确，细节可见，背景不抢主体。
+6. 竖版 9:16 构图优先，商品在画面中占比充足。
+7. 如果参考图之间存在冲突，以用户当前要求和上一轮生成结果为优先，但不要编造不可见的商品细节。
+"""</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- G7: Python Provider -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#e8f5e9;"><span>G7 Python：VolcengineImageProvider.generate()</span><span class="badge badge-python">Python</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/services/ai-orchestrator/src/providers/volcengine_image.py#L59" target="_blank">📄 volcengine_image.py:59-126</a>
+        <div class="code-block">
+<span class="cm">// ❶ 收集参考图 URL（首次生成：只有原始商品图）</span>
+ref_urls = [asset[<span class="str">"url"</span>] <span class="kw">for</span> asset <span class="kw">in</span> source_assets]  <span class="cm">// [原始商品图URL]</span>
+previous_result = kwargs.get(<span class="str">"previous_result"</span>)  <span class="cm">// {} 空</span>
+
+<span class="cm">// ❷ httpx 下载 → base64 编码</span>
+ref_data_uris = [<span class="fn">_download_as_base64</span>(url) <span class="kw">for</span> url <span class="kw">in</span> ref_urls]
+    <span class="cm">// → ["data:image/png;base64,iVBORw0KGgo..."]</span>
+
+<span class="cm">// ❸ 调 Ark API</span>
+response = <span class="kw">await</span> client.images.generate(
+    model=<span class="str">"doubao-seedream-4-0-250828"</span>,
+    prompt=full_prompt,
+    extra_body={<span class="str">"image"</span>: ref_data_uris[0]},  <span class="cm">// base64 嵌入</span>
+)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- G8: Java save -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#fff3e0;"><span>G8 Java：保存新 asset</span><span class="badge badge-java">Java</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/apps/api-java/src/main/java/com/tk/ai/video/module/taskasset/service/impl/TaskAssetServiceImpl.java#L225" target="_blank">📄 TaskAssetServiceImpl.java:225-253</a>
+        <div class="code-block">
+generated.setSource(<span class="str">"ai_generated"</span>);
+generated.setAssetRole(<span class="str">"image_variant"</span>);
+generated.setUrl(url);  <span class="cm">// Ark 返回的图片 URL</span>
+generated.setConfirmed(<span class="kw">false</span>);
+generated.setMetadata({
+    prompt: <span class="str">"在黑色 T 恤背面加蝴蝶图案..."</span>,
+    sourceAssetIds: [原始商品图UUID],
+    provider: <span class="str">"volcengine"</span>,
+    model: <span class="str">"doubao-seedream-4-0-250828"</span>,
+    generationRound: <span class="val">1</span>,
+});
+
+taskAssetMapper.insert(generated);  <span class="cm">// 写入 DB</span>
+<span class="kw">return</span> getAssets(taskId, userId);    <span class="cm">// 返回全量列表 → 前端刷新</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================================================ -->
+<!-- 新模块二：按反馈重新生成 — 完整链路 -->
+<!-- ============================================================ -->
+<div style="max-width:920px; margin:60px auto 0;">
+  <h2 id="sec-regenerate" style="border-bottom: 3px solid #b85450; padding-bottom: 8px; margin-bottom: 24px;">二、按反馈重新生成 — 完整链路</h2>
+</div>
+<div class="flow">
+
+  <!-- R1: 前端 regenerate UI -->
+  <div class="step">
+    <div class="connector-col"><div class="dot start"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#ffe0b2;"><span>R1 前端：只能 AI 生成的图才有此功能</span><span class="badge badge-fe">Frontend</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/apps/web/src/app/video-tasks/[id]/assets/page.tsx#L25" target="_blank">📄 assets/page.tsx:25-31, 703-716</a>
+        <div class="code-block">
+<span class="kw">function</span> <span class="fn">isGeneratedImageAsset</span>(asset) {
+    <span class="kw">return</span> asset.assetKind === <span class="str">"image"</span> &amp;&amp; (
+        asset.source === <span class="str">"ai_generated"</span> ||
+        asset.assetRole === <span class="str">"generated_result"</span> ||
+        asset.assetRole === <span class="str">"image_variant"</span>
+    );
+}
+<span class="kw">const</span> canRegenerate = !isReadOnly &amp;&amp; <span class="fn">isGeneratedImageAsset</span>(asset);
+
+<span class="cm">// AI 生成的图下方出现输入框：</span>
+&lt;textarea placeholder="例如：图案再小一点，放到胸前左侧；衣服版型和颜色不要变" /&gt;
+&lt;button onClick={submitRegeneration}&gt;按反馈重新生成&lt;/button&gt;</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- R2: 前端 POST -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#ffe0b2;"><span>R2 前端：handleRegenerateImage()</span><span class="badge badge-fe">Frontend</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/apps/web/src/app/video-tasks/[id]/assets/page.tsx#L253" target="_blank">📄 assets/page.tsx:253-272</a>
+        <div class="code-block">
+<span class="kw">async</span> <span class="fn">handleRegenerateImage</span>(asset, feedback) {
+    <span class="kw">await</span> apiRequest(
+        <span class="str">`/api/video-tasks/${id}/assets/${asset.assetId}/regenerate-image`</span>,
+        { method: <span class="str">"POST"</span>, body: { feedback: <span class="str">"图案再小一点，放到胸前左侧"</span> } }
+    );
+    setAssets(res.data.assets);
+}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- R3: Java Controller -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#fff3e0;"><span>R3 Java Controller</span><span class="badge badge-java">Java</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/apps/api-java/src/main/java/com/tk/ai/video/module/taskasset/controller/TaskAssetController.java#L72" target="_blank">📄 TaskAssetController.java:72-81</a>
+        <div class="code-block">
+<span class="kw">@PostMapping</span>(<span class="str">"/api/video-tasks/{taskId}/assets/{assetId}/regenerate-image"</span>)
+<span class="kw">public</span> ApiResponse&lt;TaskAssetListResponse&gt; <span class="fn">regenerateAssetImage</span>(...) {
+    <span class="kw">return</span> ApiResponse.ok(taskAssetService.regenerateAssetImage(taskId, assetId, request, userId));
+}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- R4: Java Service -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#fff3e0;"><span>R4 Java Service — regenerateAssetImage()</span><span class="badge badge-java">Java</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/apps/api-java/src/main/java/com/tk/ai/video/module/taskasset/service/impl/TaskAssetServiceImpl.java#L139" target="_blank">📄 TaskAssetServiceImpl.java:139-196</a>
+        <div class="code-block">
+<span class="cm">// ❶ 读 parent（上一轮 AI 图）的 metadata</span>
+Map parentMetadata = parent.getMetadata();
+<span class="cm">//    → prompt: "在黑色 T 恤背面加蝴蝶图案，保持版型不变"</span>
+<span class="cm">//    → sourceAssetIds: [原始商品图UUID]</span>
+<span class="cm">//    → generationRound: 1</span>
+
+<span class="cm">// ❷ 拼新 prompt</span>
+String prompt = buildRegenerationPrompt(parentMetadata.get(<span class="str">"prompt"</span>), feedback);
+<span class="cm">// "Original request:\n在黑色 T 恤背面加蝴蝶图案...\n\n</span>
+<span class="cm">//  User feedback:\n图案再小一点，放到胸前左侧\n\n</span>
+<span class="cm">//  Keep unchanged parts from feedback."</span>
+
+<span class="cm">// ❸ generationRound = 1 + 1 = 2</span>
+<span class="kw">int</span> generationRound = intValue(parentMetadata.get(<span class="str">"generationRound"</span>), <span class="val">1</span>) + <span class="val">1</span>;
+
+<span class="cm">// ❹ 构建 generationContext</span>
+generationContext = {
+    feedback: <span class="str">"图案再小一点，放到胸前左侧"</span>,
+    previousPrompt: <span class="str">"在黑色 T 恤背面加蝴蝶图案..."</span>,
+    previousResult: { assetId, url: 上一轮图URL, role, generationRound: 1 }
+};</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- R5: sourceAssets -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#fff3e0;"><span>R5 Java：selectSourceAssetsForRegeneration()</span><span class="badge badge-java">Java</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/apps/api-java/src/main/java/com/tk/ai/video/module/taskasset/service/impl/TaskAssetServiceImpl.java#L406" target="_blank">📄 TaskAssetServiceImpl.java:406-421</a>
+        <div class="code-block">
+<span class="cm">// ❶ 从 parent.metadata.sourceAssetIds 找回原始商品图 UUID</span>
+Set&lt;UUID&gt; sourceIds = {原始商品图UUID};
+
+<span class="cm">// ❷ 在 allAssets 里匹配 → [原始商品图]</span>
+List&lt;TaskAssetEntity&gt; sourceAssets = allAssets.stream()
+    .filter(asset -> sourceIds.contains(asset.getId())).toList();
+
+<span class="cm">// ❸ 把 parent（上一轮 AI 图）也加进去</span>
+<span class="kw">if</span> (!sourceAssets.contains(parent)) {
+    sourceAssets.add(parent);
+}
+<span class="cm">// → sourceAssets = [原始商品图, 上一轮AI生成图]</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- R6: HTTP payload -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#fff3e0;"><span>R6 Java AiServiceClient — generationContext 展开到 HTTP body</span><span class="badge badge-java">Java</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/apps/api-java/src/main/java/com/tk/ai/video/common/AiServiceClient.java#L176" target="_blank">📄 AiServiceClient.java:176-178</a>
+        <div class="code-block">
+<span class="cm">// generationContext 字段直接铺进 payload</span>
+<span class="kw">if</span> (generationContext != <span class="kw">null</span>) { payload.putAll(generationContext); }
+
+<span class="cm">// → HTTP body 多了：</span>
+<span class="str">"feedback"</span>: <span class="str">"图案再小一点，放到胸前左侧"</span>
+<span class="str">"previousPrompt"</span>: <span class="str">"在黑色 T 恤背面加蝴蝶图案..."</span>
+<span class="str">"previousResult"</span>: { assetId, url: 上一轮图URL, role, generationRound: 1 }</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- R7: Python prompt -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#e8f5e9;"><span>R7 Python：generate_asset_image() + _build_asset_image_prompt()（迭代模式）</span><span class="badge badge-python">Python</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/services/ai-orchestrator/src/api/asset_images.py#L34" target="_blank">📄 asset_images.py:34-43, 75-93</a>
+        <div class="code-block">
+<span class="cm">// 这次 req.previousResult / req.feedback / req.previousPrompt 都有值</span>
+
+<span class="cm">// ── _build_asset_image_prompt() 内部 ──</span>
+revision_lines = [
+    <span class="str">"- 上一轮生成要求：在黑色 T 恤背面加蝴蝶图案..."</span>,
+    <span class="str">"- 上一轮生成结果：https://ark.../上一轮.png"</span>,
+    <span class="str">"- 本轮用户反馈：图案再小一点，放到胸前左侧"</span>,
+];
+revision_block = <span class="str">"\n"</span>.join(revision_lines);
+
+<span class="cm">// ── generate_asset_image() 端点 ──</span>
+negative_prompt = <span class="str">"watermark, logo hallucination, unreadable text, "</span>
+                  <span class="str">"extra limbs, distorted garment, low quality, blurry"</span>
+
+result = <span class="kw">await</span> provider.generate(
+    prompt=prompt,                        <span class="cm">// 含完整迭代上下文的 prompt</span>
+    negative_prompt=negative_prompt,
+    source_assets=req.sourceAssets,       <span class="cm">// [原始商品图, 上一轮AI图]</span>
+    previous_result=req.previousResult,   <span class="cm">// { url: 上一轮图URL }</span>
+    feedback=req.feedback,                <span class="cm">// "图案再小一点，放到胸前左侧"</span>
+    previous_prompt=req.previousPrompt,   <span class="cm">// "在黑色 T 恤背面加蝴蝶图案..."</span>
+    size=<span class="str">"1024x1792"</span>,
+)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- R8: Python Provider with both images -->
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#e8f5e9;"><span>R8 Python Provider — 两张参考图都下载为 base64</span><span class="badge badge-python">Python</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/services/ai-orchestrator/src/providers/volcengine_image.py#L79" target="_blank">📄 volcengine_image.py:79-106</a>
+        <div class="code-block">
+<span class="cm">// ❶ 收集参考图：原始商品图 + 上一轮AI图</span>
+ref_urls = []
+<span class="kw">for</span> asset <span class="kw">in</span> source_assets:           <span class="cm">// [原始商品图, 上一轮AI图]</span>
+    ref_urls.append(asset[<span class="str">"url"</span>])    <span class="cm">// 原始URL + 上一轮URL</span>
+prev_url = previous_result.get(<span class="str">"url"</span>)
+ref_urls.append(prev_url)             <span class="cm">// 上一轮URL（确保一定在）</span>
+
+<span class="cm">// ❷ 全部下载 → base64</span>
+ref_data_uris = [<span class="fn">_download_as_base64</span>(url) <span class="kw">for</span> url <span class="kw">in</span> ref_urls]
+
+<span class="cm">// ❸ 传给 Seedream：两张图都嵌入</span>
+extra_body = {
+    <span class="str">"image"</span>: ref_data_uris[0],         <span class="cm">// 主参考</span>
+    <span class="str">"images"</span>: ref_data_uris,               <span class="cm">// 全部参考 [原始base64, 上一轮base64]</span>
+}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- R9: Java save with traceability -->
+  <div class="step">
+    <div class="connector-col"><div class="dot end"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#fff3e0;"><span>R9 Java：保存 — 不覆盖旧图，metadata 记录完整链路</span><span class="badge badge-java">Java</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/apps/api-java/src/main/java/com/tk/ai/video/module/taskasset/service/impl/TaskAssetServiceImpl.java#L225" target="_blank">📄 TaskAssetServiceImpl.java:225-253</a>
+        <div class="code-block">
+generated.setSource(<span class="str">"ai_generated"</span>);
+generated.setAssetRole(<span class="str">"image_variant"</span>);
+generated.setUrl(newUrl);  <span class="cm">// Ark 新返回的 URL</span>
+generated.setMetadata({
+    prompt: <span class="str">"Original request:... User feedback:..."</span>,
+    parentAssetId: 上一轮UUID,                <span class="cm">// ← 链路可追溯</span>
+    feedback: <span class="str">"图案再小一点，放到胸前左侧"</span>,
+    previousPrompt: <span class="str">"在黑色 T 恤背面加蝴蝶图案..."</span>,
+    previousResultUrl: <span class="str">"https://ark.../上一轮.png"</span>,
+    sourceAssetIds: [原始商品图UUID],          <span class="cm">// 始终指向原始</span>
+    generationRound: <span class="val">2</span>,
+});
+taskAssetMapper.insert(generated);  <span class="cm">// 旧图不覆盖，新增一条</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================================================ -->
+<!-- 新模块三：确认时哪些图被传给 AI -->
+<!-- ============================================================ -->
+<div style="max-width:920px; margin:60px auto 0;">
+  <h2 id="sec-confirm" style="border-bottom: 3px solid #d32f2f; padding-bottom: 8px; margin-bottom: 24px;">三、确认时，哪些图被传给 AI 分析？</h2>
+</div>
+<div class="flow">
+
+  <div class="step">
+    <div class="connector-col"><div class="dot start"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#fce4ec;"><span>① 前端确认 — 只选最后一张 AI 图</span><span class="badge badge-fe">Frontend</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/apps/web/src/app/video-tasks/[id]/assets/page.tsx#L305" target="_blank">📄 assets/page.tsx:305-315</a>
+        <div class="code-block">
+<span class="kw">const</span> latestGeneratedImage = [...assets]
+    .filter(isGeneratedImageAsset)
+    .sort(...)[<span class="val">0</span>];  <span class="cm">// 取最新一张 AI 图</span>
+
+<span class="kw">const</span> confirmAssetIds = latestGeneratedImage
+    ? [latestGeneratedImage.assetId]    <span class="cm">// ← 🔴 只有 AI 图</span>
+    : undefined;  <span class="cm">// 没 AI 图才走 undefined（全确认）</span>
+
+POST /confirm { assetIds: <span class="str">[AI图UUID]</span> }  <span class="cm">// 原始商品图不在里面</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#fce4ec;"><span>② Java — 只确认请求里指定的 asset</span><span class="badge badge-java">Java</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/apps/api-java/src/main/java/com/tk/ai/video/module/taskasset/service/impl/TaskAssetServiceImpl.java#L338" target="_blank">📄 TaskAssetServiceImpl.java:338-349</a>
+        <div class="code-block">
+<span class="kw">private void</span> <span class="fn">markRequestedAssetsConfirmed</span>(request, assets) {
+    Set&lt;UUID&gt; idsToConfirm = Set.of(AI图UUID);
+    <span class="kw">for</span> (TaskAssetEntity asset : assets) {
+        <span class="kw">if</span> (idsToConfirm.contains(asset.getId())) {
+            asset.setConfirmed(<span class="kw">true</span>);         <span class="cm">// ← 只有 AI 图被确认</span>
+        }
+        <span class="cm">// 原始商品图 confirmed 还是 false ❌</span>
+    }
+}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#fce4ec;"><span>③ Java — selectAssetsForAnalysis：有 AI 图就只返回 AI 图</span><span class="badge badge-java">Java</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/apps/api-java/src/main/java/com/tk/ai/video/module/taskasset/service/impl/TaskAssetServiceImpl.java#L382" target="_blank">📄 TaskAssetServiceImpl.java:382-393</a>
+        <div class="code-block">
+<span class="kw">private</span> List&lt;TaskAssetEntity&gt; <span class="fn">selectAssetsForAnalysis</span>(confirmedAssets) {
+    <span class="cm">// ❶ 先找 AI 生成的（confirmed + analyzable + generated）</span>
+    List generatedOrEditedAssets = confirmedAssets.stream()
+        .filter(this::isAnalyzableAsset)
+        .filter(this::isGeneratedOrEditedAsset)      <span class="cm">// source="ai_generated" 或 role="image_variant"</span>
+        .toList();
+
+    <span class="kw">if</span> (!generatedOrEditedAssets.isEmpty()) {
+        <span class="kw">return</span> generatedOrEditedAssets;  <span class="cm">// ← 🔴 有 AI 图就只返回 AI 图！</span>
+    }
+    <span class="kw">return</span> confirmedAssets.stream()
+        .filter(this::isAnalyzableAsset).toList();   <span class="cm">// 没 AI 图才返回原始素材</span>
+}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="connector-col"><div class="dot"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#fce4ec;"><span>④ Java → Python：只传了 AI 图</span><span class="badge badge-java">Java</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/apps/api-java/src/main/java/com/tk/ai/video/common/AiServiceClient.java#L135" target="_blank">📄 AiServiceClient.java:135-147</a>
+        <div class="code-block">
+aiServiceClient.startAssetAnalysis(
+    taskId, productId, userId,
+    productContext,          <span class="cm">// 商品名、描述</span>
+    <span class="str">[AI图]</span>                  <span class="cm">// ← 🔴 只有 AI 生成的变体图</span>
+);
+
+POST /ai/workflows/asset-analysis
+body: {
+    <span class="str">"assets"</span>: [{ assetId: AI图UUID, role: <span class="str">"image_variant"</span>, url: <span class="str">"https://ark.../生成图.jpeg"</span> }]
+}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="connector-col"><div class="dot end"></div><div class="connector"></div></div>
+    <div class="card">
+      <div class="card-header" style="background:#fce4ec;"><span>⑤ Python — LLM 只看到 AI 变体图，不知道原始商品</span><span class="badge badge-python">Python</span></div>
+      <div class="card-body">
+        <a class="file-link" href="Automated E-commerce/services/ai-orchestrator/src/activities/analyze_fashion_assets.py#L166" target="_blank">📄 analyze_fashion_assets.py:166-219</a>
+        <div class="code-block">
+assets = <span class="fn">_extract_assets</span>(asset_context)
+<span class="cm">// → [AI图]  ← 只有 1 张，原始商品图不在</span>
+
+image_urls = <span class="fn">_extract_image_urls</span>(assets)
+<span class="cm">// → ["https://ark.../生成图.jpeg"]</span>
+
+<span class="cm">// LLM 只看到这张 AI 生成的变体图</span>
+<span class="cm">// 不知道原始商品是 40oz 随行杯、不锈钢材质、带吸管</span>
+<span class="cm">// productProfile 里虽然有 "name" 和 "description"</span>
+<span class="cm">// 但 LLM prompt 明确说 "图片是主要证据，文字只是辅助"</span>
+
+<span class="cm">→ 结果："Product is a 'cup' with matte black finish..."</span>
+<span class="cm">→ 模型把产品描述成了 "杯子"</span></div>
+        <div class="arrow" style="margin-top:8px; color:#d32f2f;">
+        ⚠️ AI 变体图取代了原始商品图成为分析的唯一视觉依据
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

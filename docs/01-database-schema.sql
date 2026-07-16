@@ -228,6 +228,7 @@ CREATE TABLE video_tasks (
     need_voiceover BOOLEAN NOT NULL DEFAULT FALSE,
 
     selected_plan_id UUID,
+    asset_analysis JSONB,
     render_manifest JSONB,
     manifest_version VARCHAR(50) NOT NULL DEFAULT '1.0.0',
     schema_version VARCHAR(50) NOT NULL DEFAULT '1.0.0',

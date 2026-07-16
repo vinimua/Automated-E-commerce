@@ -48,6 +48,38 @@ public class TaskAssetController {
                 taskAssetService.updateAssetRole(taskId, assetId, request, principal.getUserId())));
     }
 
+    @DeleteMapping("/api/video-tasks/{taskId}/assets/{assetId}")
+    public ApiResponse<TaskAssetListResponse> deleteAsset(
+            @PathVariable UUID taskId,
+            @PathVariable UUID assetId,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        taskAssetService.deleteAsset(taskId, assetId, principal.getUserId());
+        return ApiResponse.ok(new TaskAssetListResponse(taskId,
+                taskAssetService.getAssets(taskId, principal.getUserId())));
+    }
+
+    @PostMapping("/api/video-tasks/{taskId}/assets/generate-image")
+    public ApiResponse<TaskAssetListResponse> generateAssetImage(
+            @PathVariable UUID taskId,
+            @Valid @RequestBody GenerateAssetImageRequest request,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        return ApiResponse.ok(new TaskAssetListResponse(taskId,
+                taskAssetService.generateAssetImage(taskId, request, principal.getUserId())));
+    }
+
+    @PostMapping("/api/video-tasks/{taskId}/assets/{assetId}/regenerate-image")
+    public ApiResponse<TaskAssetListResponse> regenerateAssetImage(
+            @PathVariable UUID taskId,
+            @PathVariable UUID assetId,
+            @Valid @RequestBody RegenerateAssetImageRequest request,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        return ApiResponse.ok(new TaskAssetListResponse(taskId,
+                taskAssetService.regenerateAssetImage(taskId, assetId, request, principal.getUserId())));
+    }
+
     @PostMapping("/api/video-tasks/{taskId}/assets/confirm")
     public ApiResponse<VideoTaskStatusResponse> confirmAssets(
             @PathVariable UUID taskId,

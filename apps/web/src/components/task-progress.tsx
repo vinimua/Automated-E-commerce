@@ -4,7 +4,7 @@ import { STATUS_LABELS } from "@/types/api";
 import { cn } from "@/lib/utils";
 import { Check, Loader2, XCircle } from "lucide-react";
 
-const PROGRESS_STAGES = [
+const LEGACY_STAGES = [
   { key: "analyzing", label: "AI 分析" },
   { key: "plan_generated", label: "生成方案" },
   { key: "waiting_plan_selection", label: "等待选择" },
@@ -14,25 +14,59 @@ const PROGRESS_STAGES = [
   { key: "completed", label: "完成" },
 ];
 
-const STAGE_ORDER = PROGRESS_STAGES.map((s) => s.key);
+const FASHION_STAGES = [
+  { key: "asset_uploading", label: "上传素材" },
+  { key: "asset_analyzing", label: "AI 分析" },
+  { key: "plan_generating", label: "生成方案" },
+  { key: "storyboard_generating", label: "AI 分镜" },
+  { key: "keyframe_configuring", label: "关键帧" },
+  { key: "video_clip_generating", label: "视频片段" },
+  { key: "rendering", label: "渲染审核" },
+  { key: "completed", label: "完成" },
+];
 
-function getCurrentStageIndex(status: string): number {
+const FASHION_STAGE_ORDER = FASHION_STAGES.map((s) => s.key);
+const LEGACY_STAGE_ORDER = LEGACY_STAGES.map((s) => s.key);
+
+function resolveStageIndex(status: string, stages: typeof FASHION_STAGES): number {
   if (status === "failed") return -2;
-  if (status === "completed" || status === "exported") return STAGE_ORDER.length;
-  // Find the furthest stage reached
-  for (let i = STAGE_ORDER.length - 1; i >= 0; i--) {
-    if (status === STAGE_ORDER[i]) return i;
+  const keys = stages.map((s) => s.key);
+
+  // Exact match
+  for (let i = keys.length - 1; i >= 0; i--) {
+    if (status === keys[i]) return i;
   }
-  // For intermediate statuses, map to nearest stage
+
+  // Fuzzy match — map intermediate statuses to their milestone group
+  if (["waiting_asset_confirmation"].includes(status)) return 1; // AI 分析
+  if (["waiting_plan_selection"].includes(status)) return 2; // 生成方案
+  if (["waiting_storyboard_confirmation"].includes(status)) return 3; // AI 分镜
+  if (["image_generating", "waiting_image_confirmation"].includes(status)) return 4; // 关键帧
+  if (["waiting_video_clip_confirmation"].includes(status)) return 5; // 视频片段
+  if (["waiting_final_review", "checking", "repairing"].includes(status)) return 6; // 渲染审核
+  if (["completed", "exported"].includes(status)) return keys.length;
+
+  // Fallback for legacy statuses
   if (status.startsWith("analysis")) return 0;
-  if (status.startsWith("script")) return 3;
+  if (status.startsWith("script")) return 3; // legacy: script_generating → 脚本生成
   if (status.startsWith("material")) return 4;
   if (status === "rendering" || status === "checking") return 5;
+
   return 0;
 }
 
-export function TaskProgress({ status, errorMessage }: { status: string; errorMessage?: string | null }) {
-  const currentIdx = getCurrentStageIndex(status);
+export function TaskProgress({
+  status,
+  errorMessage,
+  taskMode,
+}: {
+  status: string;
+  errorMessage?: string | null;
+  taskMode?: string | null;
+}) {
+  const isFashion = taskMode && ["PRODUCT_CREATIVE", "REFERENCE_STORYBOARD", "USER_SCRIPT", "CUSTOM_STORYBOARD"].includes(taskMode);
+  const stages = isFashion ? FASHION_STAGES : LEGACY_STAGES;
+  const currentIdx = resolveStageIndex(status, stages);
   const isFailed = status === "failed";
 
   return (
@@ -40,7 +74,7 @@ export function TaskProgress({ status, errorMessage }: { status: string; errorMe
       {/* Progress bar */}
       <div className="relative">
         <div className="flex items-center justify-between">
-          {PROGRESS_STAGES.map((stage, i) => {
+          {stages.map((stage, i) => {
             const isCompleted = i < currentIdx;
             const isCurrent = i === currentIdx;
             const isUpcoming = i > currentIdx;
@@ -54,7 +88,10 @@ export function TaskProgress({ status, errorMessage }: { status: string; errorMe
                       "absolute top-4 h-0.5 -translate-y-4",
                       isCompleted || isCurrent ? "bg-primary" : "bg-muted"
                     )}
-                    style={{ left: `${((i - 1) / (PROGRESS_STAGES.length - 1)) * 100}%`, width: `${100 / (PROGRESS_STAGES.length - 1)}%` }}
+                    style={{
+                      left: `${((i - 1) / (stages.length - 1)) * 100}%`,
+                      width: `${100 / (stages.length - 1)}%`,
+                    }}
                   />
                 )}
                 {/* Icon */}
@@ -77,7 +114,12 @@ export function TaskProgress({ status, errorMessage }: { status: string; errorMe
                     i + 1
                   )}
                 </div>
-                <span className={cn("mt-2 text-xs", (isCompleted || isCurrent) ? "text-foreground font-medium" : "text-muted-foreground")}>
+                <span
+                  className={cn(
+                    "mt-2 text-xs",
+                    isCompleted || isCurrent ? "text-foreground font-medium" : "text-muted-foreground"
+                  )}
+                >
                   {stage.label}
                 </span>
               </div>

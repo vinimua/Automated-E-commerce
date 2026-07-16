@@ -83,7 +83,7 @@ internal-service:
 
 # AI 编排服务
 ai-orchestrator:
-  base-url: http://localhost:8000
+  base-url: ${AI_ORCHESTRATOR_BASE_URL:http://localhost:8003}
 
 # Java API public/base URL used inside async worker callback messages
 java-api:

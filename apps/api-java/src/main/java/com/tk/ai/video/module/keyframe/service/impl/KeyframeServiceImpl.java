@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -66,20 +67,50 @@ public class KeyframeServiceImpl implements KeyframeService {
         }
         boolean isUserUpload = "user_upload".equals(source);
 
-        KeyframeEntity entity = new KeyframeEntity();
-        entity.setId(UUID.randomUUID());
-        entity.setTaskId(taskId);
-        entity.setUserId(userId);
+        StoryboardContext storyboardContext = loadStoryboardContext(task);
+        StoryboardShotEntity shot = storyboardContext.shotByNo().get(request.getShotNo());
+        if (shot == null) {
+            throw new BusinessException("No storyboard shot found for shotNo=" + request.getShotNo());
+        }
+
+        KeyframeEntity entity = keyframeMapper
+                .findByTaskIdAndShotNoAndVersion(taskId, request.getShotNo(), task.getCurrentVersion())
+                .orElseGet(() -> {
+                    KeyframeEntity created = new KeyframeEntity();
+                    created.setId(UUID.randomUUID());
+                    created.setTaskId(taskId);
+                    created.setUserId(userId);
+                    created.setShotNo(request.getShotNo());
+                    created.setVersion(task.getCurrentVersion());
+                    return created;
+                });
+        boolean isNew = entity.getCreatedAt() == null;
+        if ("confirmed".equals(entity.getStatus())) {
+            throw new BusinessException("Keyframe already confirmed for shotNo=" + request.getShotNo());
+        }
+
+        entity.setStoryboardId(storyboardContext.storyboard().getId());
+        entity.setShotId(shot.getId());
         entity.setShotNo(request.getShotNo());
         entity.setSource(source);
         entity.setAssetId(request.getAssetId());
+        entity.setMaterialId(null);
         entity.setImagePurpose(request.getImagePurpose() != null ? request.getImagePurpose() : "first_frame");
         entity.setUrl(request.getUrl());
         entity.setPrompt(request.getPrompt());
+        entity.setNegativePrompt(null);
         entity.setUserInstruction(request.getUserInstruction());
-        entity.setStatus(isUserUpload ? "uploaded" : "draft");
+        entity.setProvider(null);
+        entity.setModelName(null);
+        entity.setErrorMessage(null);
+        entity.setStatus(isUserUpload ? "uploaded" : "generating");
         entity.setVersion(task.getCurrentVersion());
-        keyframeMapper.insert(entity);
+        entity.setUpdatedAt(OffsetDateTime.now());
+        if (isNew) {
+            keyframeMapper.insert(entity);
+        } else {
+            keyframeMapper.updateById(entity);
+        }
 
         // User-uploaded keyframes do NOT consume image quota.
         // AI-generated keyframes consume quota when the callback confirms success (in AiCallbackServiceImpl).
@@ -97,7 +128,7 @@ public class KeyframeServiceImpl implements KeyframeService {
                 videoTaskMapper.updateById(task);
             }
 
-            Map<String, Object> storyboardMap = buildStoryboardPayload(task, Set.of(request.getShotNo()));
+            Map<String, Object> storyboardMap = buildStoryboardPayload(storyboardContext, Set.of(request.getShotNo()));
             aiServiceClient.startKeyframeGeneration(taskId, task.getProductId(), userId, storyboardMap);
         }
 
@@ -161,7 +192,8 @@ public class KeyframeServiceImpl implements KeyframeService {
         }
 
         // Fetch storyboard for AI workflow
-        Map<String, Object> storyboardMap = buildStoryboardPayload(task);
+        StoryboardContext storyboardContext = loadStoryboardContext(task);
+        Map<String, Object> storyboardMap = buildStoryboardPayload(storyboardContext, Set.of());
         if (storyboardMap.isEmpty()) {
             throw new BusinessException("No storyboard found for task, cannot generate keyframes");
         }
@@ -170,28 +202,50 @@ public class KeyframeServiceImpl implements KeyframeService {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> shots = (List<Map<String, Object>>) storyboardMap.getOrDefault("shots", List.of());
         Set<Integer> targetShotNos = new HashSet<>();
+        List<KeyframeEntity> existingKeyframes = keyframeMapper.findByTaskIdAndVersion(taskId, task.getCurrentVersion());
+        Map<Integer, KeyframeEntity> existingByShotNo = existingKeyframes.stream()
+                .collect(Collectors.toMap(KeyframeEntity::getShotNo, k -> k, (left, right) -> right));
         for (Map<String, Object> shot : shots) {
             Integer shotNo = (Integer) shot.get("shotNo");
             if (shotNo == null) continue;
 
-            // Check if keyframe already exists for this shot in current version
-            List<KeyframeEntity> existing = keyframeMapper.findByTaskId(taskId);
-            boolean exists = existing.stream()
-                    .anyMatch(k -> k.getShotNo() == shotNo && k.getVersion() == task.getCurrentVersion());
-            if (exists) continue;
+            KeyframeEntity existing = existingByShotNo.get(shotNo);
+            if (existing != null && !shouldBatchGenerate(existing)) {
+                continue;
+            }
             targetShotNos.add(shotNo);
 
-            KeyframeEntity entity = new KeyframeEntity();
-            entity.setId(UUID.randomUUID());
-            entity.setTaskId(taskId);
-            entity.setUserId(userId);
+            StoryboardShotEntity storyboardShot = storyboardContext.shotByNo().get(shotNo);
+            KeyframeEntity entity = existing != null ? existing : new KeyframeEntity();
+            boolean isNew = entity.getId() == null;
+            if (isNew) {
+                entity.setId(UUID.randomUUID());
+                entity.setTaskId(taskId);
+                entity.setUserId(userId);
+                entity.setShotNo(shotNo);
+                entity.setVersion(task.getCurrentVersion());
+            }
+            entity.setStoryboardId(storyboardContext.storyboard().getId());
+            entity.setShotId(storyboardShot != null ? storyboardShot.getId() : null);
             entity.setShotNo(shotNo);
             entity.setSource("ai_generated");
+            entity.setAssetId(null);
+            entity.setMaterialId(null);
             entity.setImagePurpose("first_frame");
+            entity.setUrl(null);
             entity.setPrompt((String) shot.getOrDefault("prompt", ""));
-            entity.setStatus("draft");
+            entity.setNegativePrompt((String) shot.getOrDefault("negativePrompt", ""));
+            entity.setProvider(null);
+            entity.setModelName(null);
+            entity.setStatus("generating");
+            entity.setErrorMessage(null);
             entity.setVersion(task.getCurrentVersion());
-            keyframeMapper.insert(entity);
+            entity.setUpdatedAt(OffsetDateTime.now());
+            if (isNew) {
+                keyframeMapper.insert(entity);
+            } else {
+                keyframeMapper.updateById(entity);
+            }
         }
 
         if (targetShotNos.isEmpty()) {
@@ -254,7 +308,8 @@ public class KeyframeServiceImpl implements KeyframeService {
         }
 
         // Trigger AI workflow for this single shot
-        Map<String, Object> storyboardMap = buildStoryboardPayload(task, Set.of(keyframe.getShotNo()));
+        StoryboardContext storyboardContext = loadStoryboardContext(task);
+        Map<String, Object> storyboardMap = buildStoryboardPayload(storyboardContext, Set.of(keyframe.getShotNo()));
         aiServiceClient.startKeyframeGeneration(taskId, task.getProductId(), userId, storyboardMap);
 
         log.info("Keyframe regeneration triggered: taskId={}, keyframeId={}, shotNo={}", taskId, keyframeId, keyframe.getShotNo());
@@ -262,8 +317,7 @@ public class KeyframeServiceImpl implements KeyframeService {
     }
 
     private VideoTaskStatusResponse checkAndAdvanceAfterAllConfirmed(VideoTaskEntity task) {
-        long unconfirmed = keyframeMapper.countUnconfirmedByTaskIdAndVersion(task.getId(), task.getCurrentVersion());
-        if (unconfirmed == 0) {
+        if (areAllStoryboardShotsConfirmed(task)) {
             // All keyframes must be explicitly confirmed before video clip generation.
             if ("waiting_image_confirmation".equals(task.getStatus()) || "keyframe_configuring".equals(task.getStatus())) {
                 String nextStatus = "video_clip_generating";
@@ -294,21 +348,59 @@ public class KeyframeServiceImpl implements KeyframeService {
         return new VideoTaskStatusResponse(task.getId(), task.getStatus(), task.getProgress());
     }
 
-    private Map<String, Object> buildStoryboardPayload(VideoTaskEntity task) {
-        return buildStoryboardPayload(task, Set.of());
-    }
-
-    private Map<String, Object> buildStoryboardPayload(VideoTaskEntity task, Set<Integer> targetShotNos) {
+    private boolean areAllStoryboardShotsConfirmed(VideoTaskEntity task) {
         StoryboardEntity storyboard = storyboardMapper.findByTaskId(task.getId()).orElse(null);
         if (storyboard == null) {
-            return Map.of();
+            log.warn("Cannot advance keyframes: no storyboard found, taskId={}", task.getId());
+            return false;
         }
 
         List<StoryboardShotEntity> shots = storyboardShotMapper.findByStoryboardId(storyboard.getId());
-        List<Map<String, Object>> shotMaps = shots.stream()
+        if (shots.isEmpty()) {
+            log.warn("Cannot advance keyframes: storyboard has no shots, taskId={}, storyboardId={}",
+                    task.getId(), storyboard.getId());
+            return false;
+        }
+
+        List<KeyframeEntity> keyframes = keyframeMapper.findByTaskIdAndVersion(task.getId(), task.getCurrentVersion());
+        for (StoryboardShotEntity shot : shots) {
+            boolean confirmed = keyframes.stream().anyMatch(k ->
+                    k.getShotNo() == shot.getShotNo()
+                            && "confirmed".equals(k.getStatus())
+                            && (k.getShotId() == null || Objects.equals(k.getShotId(), shot.getId()))
+            );
+            if (!confirmed) {
+                log.info("Keyframe confirmation incomplete: taskId={}, missingOrUnconfirmedShotNo={}",
+                        task.getId(), shot.getShotNo());
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private Map<String, Object> buildStoryboardPayload(VideoTaskEntity task) {
+        return buildStoryboardPayload(loadStoryboardContext(task), Set.of());
+    }
+
+    private StoryboardContext loadStoryboardContext(VideoTaskEntity task) {
+        StoryboardEntity storyboard = storyboardMapper.findByTaskId(task.getId()).orElse(null);
+        if (storyboard == null) {
+            throw new BusinessException("No storyboard found for task, cannot configure keyframes");
+        }
+
+        List<StoryboardShotEntity> shots = storyboardShotMapper.findByStoryboardId(storyboard.getId());
+        Map<Integer, StoryboardShotEntity> shotByNo = shots.stream()
+                .collect(Collectors.toMap(StoryboardShotEntity::getShotNo, s -> s, (left, right) -> right));
+        return new StoryboardContext(storyboard, shots, shotByNo);
+    }
+
+    private Map<String, Object> buildStoryboardPayload(StoryboardContext context, Set<Integer> targetShotNos) {
+        StoryboardEntity storyboard = context.storyboard();
+        List<Map<String, Object>> shotMaps = context.shots().stream()
                 .filter(s -> targetShotNos == null || targetShotNos.isEmpty() || targetShotNos.contains(s.getShotNo()))
                 .map(s -> {
             Map<String, Object> shot = new LinkedHashMap<>();
+            shot.put("shotId", s.getId().toString());
             shot.put("shotNo", s.getShotNo());
             shot.put("duration", s.getDuration());
             shot.put("scene", s.getScene() != null ? s.getScene() : "");
@@ -334,6 +426,19 @@ public class KeyframeServiceImpl implements KeyframeService {
             payload.put("targetShotNos", targetShotNos.stream().sorted().collect(Collectors.toList()));
         }
         return payload;
+    }
+
+    private boolean shouldBatchGenerate(KeyframeEntity keyframe) {
+        return keyframe == null
+                || keyframe.getStatus() == null
+                || List.of("draft", "rejected", "failed").contains(keyframe.getStatus());
+    }
+
+    private record StoryboardContext(
+            StoryboardEntity storyboard,
+            List<StoryboardShotEntity> shots,
+            Map<Integer, StoryboardShotEntity> shotByNo
+    ) {
     }
 
     private Map<String, Object> filterStoryboardPayload(Map<String, Object> storyboardMap, Set<Integer> targetShotNos) {

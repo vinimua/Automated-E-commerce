@@ -2,6 +2,14 @@
 
 import pytest
 
+from src.config import settings
+
+
+@pytest.fixture(autouse=True)
+def force_fake_llm_for_tests(monkeypatch):
+    """Unit tests must never call paid or external model APIs from local .env."""
+    monkeypatch.setattr(settings, "force_fake_llm", True)
+
 
 @pytest.fixture
 def sample_product_context():

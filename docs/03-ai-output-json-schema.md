@@ -921,76 +921,13 @@ Pydantic Model + jsonschema 双重校验
   "title": "FashionAssetAnalysis",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "productCategory",
-    "styleAttributes",
-    "visualFeatures",
-    "recommendedAngles",
-    "assetQualityScore"
-  ],
+  "required": ["schemaVersion", "analysisText", "analyzedAssetIds", "model", "analyzedAt"],
   "properties": {
-    "productCategory": {
-      "type": "string",
-      "minLength": 1
-    },
-    "styleAttributes": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "type": "string"
-      }
-    },
-    "visualFeatures": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "colors": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "patterns": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "materials": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "fit": {
-          "type": "string"
-        },
-        "occasions": {
-          "type": "array",
-          "items": { "type": "string" }
-        }
-      }
-    },
-    "recommendedAngles": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "type": "string"
-      }
-    },
-    "assetQualityScore": {
-      "type": "integer",
-      "minimum": 0,
-      "maximum": 100
-    },
-    "missingAngles": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
-    "lightingNotes": {
-      "type": "string"
-    },
-    "backgroundRecommendations": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
-    "modelRequirements": {
-      "type": "string"
-    }
+    "schemaVersion": { "const": "1.0" },
+    "analysisText": { "type": "string", "minLength": 1 },
+    "analyzedAssetIds": { "type": "array", "items": { "type": "string" } },
+    "model": { "type": "string", "minLength": 1 },
+    "analyzedAt": { "type": "string", "minLength": 1 }
   }
 }
 ```
@@ -999,29 +936,26 @@ Pydantic Model + jsonschema 双重校验
 
 ```json
 {
-  "productCategory": "Women's Summer Dress",
-  "styleAttributes": ["floral", "casual", "A-line", "midi"],
-  "visualFeatures": {
-    "colors": ["white", "blue"],
-    "patterns": ["floral print"],
-    "materials": ["cotton", "linen"],
-    "fit": "relaxed",
-    "occasions": ["beach", "casual outdoor", "vacation"]
-  },
-  "recommendedAngles": [
-    "full front view",
-    "side view showing silhouette",
-    "back detail of floral pattern",
-    "fabric texture close-up",
-    "worn on model walking"
-  ],
-  "assetQualityScore": 85,
-  "missingAngles": ["detail of neckline", "back zipper detail"],
-  "lightingNotes": "Natural outdoor sunlight, golden hour preferred",
-  "backgroundRecommendations": ["beach", "garden", "white wall minimal"],
-  "modelRequirements": "Size S model, 5'6\"-5'8\", natural pose"
+  "schemaVersion": "1.0",
+  "analysisText": "素材展示蓝白碎花波西米亚连衣裙，最有价值的创作机会是围绕裙摆动态构建度假叙事。避免普通商品轮播、改变花纹，以及在缺少背面参考时虚构背面细节。",
+  "analyzedAssetIds": ["asset-1", "asset-2"],
+  "model": "vision-model",
+  "analyzedAt": "2026-07-11T12:00:00Z"
 }
 ```
+
+方案与分镜生成统一接收运行时组装的 `creativeContext`：
+
+```json
+{
+  "productProfile": {},
+  "userRequest": { "rawPrompt": "用户输入原文", "parsed": {}, "confirmed": {} },
+  "assetAnalysis": {},
+  "workflow": { "taskMode": "PRODUCT_CREATIVE", "durationSeconds": 20, "videoType": "product_showcase" }
+}
+```
+
+该对象不单独持久化；Java 在每次调用 AI 前从商品、用户需求、任务级素材分析和任务参数动态组装。
 
 ---
 

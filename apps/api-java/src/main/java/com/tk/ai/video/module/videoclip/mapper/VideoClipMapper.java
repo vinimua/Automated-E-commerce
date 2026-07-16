@@ -1,9 +1,9 @@
 package com.tk.ai.video.module.videoclip.mapper;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.tk.ai.video.module.videoclip.entity.VideoClipEntity;
 import org.apache.ibatis.annotations.Mapper;
-import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 import java.util.Optional;
@@ -12,15 +12,38 @@ import java.util.UUID;
 @Mapper
 public interface VideoClipMapper extends BaseMapper<VideoClipEntity> {
 
-    @Select("SELECT * FROM video_clips WHERE task_id = #{taskId} ORDER BY shot_no, version")
-    List<VideoClipEntity> findByTaskId(UUID taskId);
+    /** Use MyBatis-Plus wrapper so autoResultMap applies and JSONB metadata deserializes correctly. */
+    default List<VideoClipEntity> findByTaskId(UUID taskId) {
+        return selectList(new LambdaQueryWrapper<VideoClipEntity>()
+                .eq(VideoClipEntity::getTaskId, taskId)
+                .orderByAsc(VideoClipEntity::getShotNo, VideoClipEntity::getVersion));
+    }
 
-    @Select("SELECT * FROM video_clips WHERE id = #{id} AND task_id = #{taskId}")
-    Optional<VideoClipEntity> findByIdAndTaskId(UUID id, UUID taskId);
+    default Optional<VideoClipEntity> findByIdAndTaskId(UUID id, UUID taskId) {
+        return Optional.ofNullable(selectOne(new LambdaQueryWrapper<VideoClipEntity>()
+                .eq(VideoClipEntity::getId, id)
+                .eq(VideoClipEntity::getTaskId, taskId)));
+    }
 
-    @Select("SELECT * FROM video_clips WHERE task_id = #{taskId} AND version = #{version} ORDER BY shot_no")
-    List<VideoClipEntity> findByTaskIdAndVersion(UUID taskId, int version);
+    default Optional<VideoClipEntity> findByTaskIdAndShotNoAndVersion(UUID taskId, int shotNo, int version) {
+        return Optional.ofNullable(selectOne(new LambdaQueryWrapper<VideoClipEntity>()
+                .eq(VideoClipEntity::getTaskId, taskId)
+                .eq(VideoClipEntity::getShotNo, shotNo)
+                .eq(VideoClipEntity::getVersion, version)
+                .last("LIMIT 1")));
+    }
 
-    @Select("SELECT COUNT(*) FROM video_clips WHERE task_id = #{taskId} AND version = #{version} AND status != 'confirmed'")
-    long countUnconfirmedByTaskIdAndVersion(UUID taskId, int version);
+    default List<VideoClipEntity> findByTaskIdAndVersion(UUID taskId, int version) {
+        return selectList(new LambdaQueryWrapper<VideoClipEntity>()
+                .eq(VideoClipEntity::getTaskId, taskId)
+                .eq(VideoClipEntity::getVersion, version)
+                .orderByAsc(VideoClipEntity::getShotNo));
+    }
+
+    default long countUnconfirmedByTaskIdAndVersion(UUID taskId, int version) {
+        return selectCount(new LambdaQueryWrapper<VideoClipEntity>()
+                .eq(VideoClipEntity::getTaskId, taskId)
+                .eq(VideoClipEntity::getVersion, version)
+                .ne(VideoClipEntity::getStatus, "confirmed"));
+    }
 }

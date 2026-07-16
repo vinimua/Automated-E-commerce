@@ -1,18 +1,16 @@
--- V12: Fix task_assets constraints to match V3 spec
--- Current constraints only allow: keyframe, video_clip, reference, product
--- V3 spec requires 14 role values and proper type values
+-- V12: Fix task_assets constraints to match V3 spec.
+-- task_assets uses asset_kind / asset_role / confirmed in V3, OpenAPI, and Java Entity.
 
--- Step 1: Migrate existing data to valid V3 roles before changing constraint
--- 'product' → 'product_front', 'keyframe' → 'ai_keyframe', 'reference' → 'scene_reference'
-UPDATE task_assets SET role = 'product_front' WHERE role = 'product';
-UPDATE task_assets SET role = 'ai_keyframe' WHERE role = 'keyframe';
-UPDATE task_assets SET role = 'scene_reference' WHERE role = 'reference';
--- 'video_clip' stays the same
+-- Step 1: Migrate existing legacy role values before changing the constraint.
+UPDATE task_assets SET asset_role = 'product_front' WHERE asset_role = 'product';
+UPDATE task_assets SET asset_role = 'ai_keyframe' WHERE asset_role = 'keyframe';
+UPDATE task_assets SET asset_role = 'scene_reference' WHERE asset_role = 'reference';
+-- 'video_clip' stays the same.
 
--- Step 2: Replace role constraint with full V3 set
+-- Step 2: Replace role constraint with the full V3 role set.
 ALTER TABLE task_assets DROP CONSTRAINT IF EXISTS chk_task_assets_role;
 ALTER TABLE task_assets ADD CONSTRAINT chk_task_assets_role CHECK (
-    role IN (
+    asset_role IN (
         'product_front',
         'product_back',
         'product_detail',
@@ -30,13 +28,15 @@ ALTER TABLE task_assets ADD CONSTRAINT chk_task_assets_role CHECK (
     )
 );
 
--- Step 3: Replace type constraint (old allowed 'product_image', V3 only allows image/video/audio)
+-- Step 3: Replace kind/type constraints. V3 allows image/video/audio only.
+ALTER TABLE task_assets DROP CONSTRAINT IF EXISTS chk_task_assets_kind;
 ALTER TABLE task_assets DROP CONSTRAINT IF EXISTS chk_task_assets_type;
-ALTER TABLE task_assets ADD CONSTRAINT chk_task_assets_type CHECK (
-    type IN ('image', 'video', 'audio')
+ALTER TABLE task_assets ADD CONSTRAINT chk_task_assets_kind CHECK (
+    asset_kind IN ('image', 'video', 'audio')
 );
 
--- Step 4: Add source constraint (missing entirely)
+-- Step 4: Replace source constraint.
+ALTER TABLE task_assets DROP CONSTRAINT IF EXISTS chk_task_assets_source;
 ALTER TABLE task_assets ADD CONSTRAINT chk_task_assets_source CHECK (
     source IN ('user_upload', 'ai_generated', 'external_url')
 );

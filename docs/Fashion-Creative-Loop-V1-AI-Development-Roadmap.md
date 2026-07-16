@@ -240,7 +240,7 @@ apps/web/src/types/api.generated.ts
   -> 支持继续添加商品图、模特图、场景图、参考视频等素材
   -> 用户确认素材
   -> 进入 asset_analyzing
-  -> fake callback 返回分析结果
+  -> fake/real callback 返回 FashionAssetAnalysis
   -> 进入 waiting_asset_confirmation
   -> 用户再次确认
   -> 根据是否有 reference_video 跳转到 reference-analysis 或 plans
@@ -264,11 +264,15 @@ POST /api/video-tasks/{taskId}/assets/confirm
 素材确认后：
 
 1. Java 设置状态为 `asset_analyzing`。
-2. Python fake workflow 或测试 callback 返回 `asset_analysis`。
-3. Java 设置状态为 `waiting_asset_confirmation`。
-4. 第二次确认素材时：
+2. Python fake workflow、真实 vision workflow 或测试 callback 返回 `asset_analysis`。
+3. `asset_analysis` payload 必须包含 `fashionAssetAnalysis`，字段为 `schemaVersion`、`analysisText`、`analyzedAssetIds`、`model`、`analyzedAt`。
+4. Java 将 `fashionAssetAnalysis` 保存到 `video_tasks.asset_analysis`，并设置状态为 `waiting_asset_confirmation`。
+5. 不再把素材分析结果写入 `products.selling_points`、`products.scenes`、`products.risk_tips` 等 V1 遗留商品分析字段。
+6. 第二次确认素材时：
    - 有 `reference_video` -> `reference_analyzing`
    - 无 `reference_video` -> `plan_generating`
+
+`analysisText` 是后续 AI 真正消费的内容；`analyzedAssetIds`、`model`、`analyzedAt` 用于前端展示、排查和判断素材是否变化。
 
 ### 前端验收
 
@@ -276,7 +280,9 @@ POST /api/video-tasks/{taskId}/assets/confirm
 2. 缺少商品图时，确认前有明确提示。
 3. 确认按钮返回预期状态。
 4. `asset_analyzing` 期间页面每 5 秒轮询。
-5. 前端只根据后端返回状态跳转。
+5. `waiting_asset_confirmation` 时展示 `assetAnalysis.analysisText`、模型、已分析素材数量和分析时间。
+6. 如果 `analyzedAssetIds.length === 0`，页面必须显示警告，提示本次分析没有读取到有效素材。
+7. 前端只根据后端返回状态跳转。
 
 ---
 
@@ -320,6 +326,14 @@ fake workflow 必须稳定返回：
 2. 被选中的方案
 3. 带 shots 的 storyboard
 4. 合法 callback payload
+
+方案生成与分镜生成必须通过运行时 `CreativeContext` 消费前置素材分析：
+
+```text
+productProfile + userRequest + assetAnalysis.analysisText + workflow
+```
+
+其中 `assetAnalysis` 来自 `video_tasks.asset_analysis`。如果存在 `assetAnalysis.analysisText`，`creative_plan` 和 `storyboard` Prompt 都必须显式引用它，避免方案和分镜脱离已确认素材。
 
 ### 前端验收
 

@@ -76,10 +76,16 @@ async def start_asset_analysis(req: AssetAnalysisRequest, request: Request):
     if client is None:
         raise HTTPException(status_code=503, detail="Temporal service unavailable")
 
+    log.info("Starting asset analysis: taskId=%s, assets=%s", req.taskId, len(req.assets))
     workflow_id = f"fa-{req.taskId}"
     await client.start_workflow(
         "FashionAnalysisWorkflow",
-        args=[str(req.taskId), req.productContext, "asset", ""],
+        args=[
+            str(req.taskId),
+            {"productContext": req.productContext, "assets": req.assets},
+            "asset",
+            "",
+        ],
         id=workflow_id,
         task_queue="ai-video-task-queue",
     )
@@ -125,7 +131,7 @@ async def start_creative_plan(req: CreativePlanRequest, request: Request):
     workflow_id = f"fplan-{req.taskId}"
     await client.start_workflow(
         "FashionPlanWorkflow",
-        args=[str(req.taskId), req.productContext, req.assetAnalysis or {}],
+        args=[str(req.taskId), req.creativeContext],
         id=workflow_id,
         task_queue="ai-video-task-queue",
     )
@@ -148,7 +154,7 @@ async def start_storyboard_generation(req: StoryboardGenerationRequest, request:
     workflow_id = f"fsb-{req.taskId}"
     await client.start_workflow(
         "FashionStoryboardWorkflow",
-        args=[str(req.taskId), req.productContext, req.selectedPlan, req.duration, req.videoType],
+        args=[str(req.taskId), req.creativeContext, req.selectedPlan, req.duration, req.videoType],
         id=workflow_id,
         task_queue="ai-video-task-queue",
     )
@@ -217,7 +223,16 @@ async def start_repair(req: RepairRequest, request: Request):
     workflow_id = f"frep-{req.taskId}"
     await client.start_workflow(
         "FashionRepairWorkflow",
-        args=[str(req.taskId), req.feedbackText, req.category, req.targetType, req.currentState],
+        args=[
+            str(req.taskId),
+            req.feedbackText,
+            req.category,
+            req.targetType,
+            {
+                **req.currentState,
+                **({"repairEventId": str(req.repairEventId)} if req.repairEventId else {}),
+            },
+        ],
         id=workflow_id,
         task_queue="ai-video-task-queue",
     )

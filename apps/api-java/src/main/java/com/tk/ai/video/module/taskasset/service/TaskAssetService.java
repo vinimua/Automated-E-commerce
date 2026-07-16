@@ -14,5 +14,11 @@ public interface TaskAssetService {
 
     List<TaskAssetResponse> updateAssetRole(UUID taskId, UUID assetId, UpdateAssetRoleRequest request, UUID userId);
 
+    List<TaskAssetResponse> generateAssetImage(UUID taskId, GenerateAssetImageRequest request, UUID userId);
+
+    List<TaskAssetResponse> regenerateAssetImage(UUID taskId, UUID assetId, RegenerateAssetImageRequest request, UUID userId);
+
     VideoTaskStatusResponse confirmAssets(UUID taskId, ConfirmAssetsRequest request, UUID userId);
+
+    void deleteAsset(UUID taskId, UUID assetId, UUID userId);
 }

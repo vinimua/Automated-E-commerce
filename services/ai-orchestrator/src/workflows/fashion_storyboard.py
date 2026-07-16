@@ -22,7 +22,7 @@ class FashionStoryboardWorkflow:
     async def run(
         self,
         task_id: str,
-        product_context: dict,
+        creative_context: dict,
         selected_plan: dict,
         duration: int,
         video_type: str,
@@ -38,7 +38,7 @@ class FashionStoryboardWorkflow:
         try:
             storyboard = await workflow.execute_activity(
                 "generate_fashion_storyboard",
-                args=[task_id, selected_plan, product_context, duration, video_type],
+                args=[task_id, selected_plan, creative_context, duration, video_type],
                 start_to_close_timeout=timedelta(minutes=2),
                 retry_policy=retry,
             )

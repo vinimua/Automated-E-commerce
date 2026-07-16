@@ -462,12 +462,39 @@ asset_analyzing:
 
 waiting_asset_confirmation:
   → AI 分析完成后，素材卡片恢复可编辑
+  → 展示 AI 分析结果卡片：
+      - 标题："AI 分析完成"
+      - 正文：`task.assetAnalysis.analysisText`
+      - 元数据：`model`、`analyzedAssetIds.length`、`analyzedAt`
+  → 如果 `analyzedAssetIds.length === 0`，展示琥珀色警告："本次分析没有读取到有效素材，请检查素材是否已上传并被传入 AI 分析。"
   → 蓝色提示条："AI 分析已完成。如需调整素材可继续添加。"
   → 再次点确认 → 后端 determineNextStatus() → 前端路由分叉:
       nextStatus === "reference_analyzing" → /reference-analysis
       nextStatus === "plan_generating" / "waiting_plan_selection" → /plans
       其他 → 留在当前页继续轮询
 ```
+
+#### 素材分析结果展示契约
+
+`/assets` 页面从 `GET /api/video-tasks/{id}` 的 `assetAnalysis` 字段读取分析结果。该字段来自 `video_tasks.asset_analysis`，结构如下：
+
+```json
+{
+  "schemaVersion": "1.0",
+  "analysisText": "视觉模型对已确认素材的完整自然语言分析。",
+  "analyzedAssetIds": ["asset-1", "asset-2"],
+  "model": "vision-model",
+  "analyzedAt": "2026-07-13T12:00:00Z"
+}
+```
+
+前端展示规则：
+
+1. 只要 `assetAnalysis.analysisText` 存在，就在 `waiting_asset_confirmation` 展示分析卡片。
+2. `analysisText` 是给用户确认和后续 AI 生成使用的核心内容，不拆成大量前端字段。
+3. `model`、`analyzedAt`、`analyzedAssetIds.length` 作为辅助信息显示。
+4. `analyzedAssetIds.length === 0` 是异常信号，表示素材没有进入 AI 分析上下文；页面应显示警告，而不是只显示“分析完成”。
+5. 用户补充或更换素材后，可以重新触发素材确认与分析，新的回调覆盖 `video_tasks.asset_analysis`。
 
 #### 资产角色（assetRole）完整列表
 

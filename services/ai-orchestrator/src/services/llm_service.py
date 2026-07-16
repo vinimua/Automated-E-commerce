@@ -1,9 +1,15 @@
 """LLM service — OpenAI/Anthropic wrapper with fake provider for dev.
 这个文件是 AI 调用的统一入口，做一件事：根据配置决定用假数据还是真 AI。"""
 
+import asyncio
+import base64
 import json
 import os
 import logging
+from urllib.parse import urlparse
+
+import httpx
+
 from src.config import settings
 
 log = logging.getLogger(__name__)
@@ -151,21 +157,11 @@ FIXTURES = {
 
 FASHION_FIXTURES = {
     "fashion_asset_analysis": {
-        "productCategory": "Women's Summer Dress",
-        "styleAttributes": ["Casual", "Bohemian", "Floral", "Lightweight"],
-        "visualFeatures": {
-            "colors": ["White", "Blue", "Yellow"],
-            "patterns": ["Floral print", "Polka dot accents"],
-            "materials": ["Cotton", "Linen blend"],
-            "fit": "A-line, knee-length",
-            "occasions": ["Beach", "Brunch", "Vacation", "Shopping"],
-        },
-        "recommendedAngles": ["Front full-body", "Back detail", "Fabric close-up", "Side profile", "Neckline detail"],
-        "assetQualityScore": 82,
-        "missingAngles": ["360-degree spin", "Back zipper close-up"],
-        "lightingNotes": "Natural daylight recommended. Avoid harsh studio flash — the floral pattern reads best in soft, diffused light.",
-        "backgroundRecommendations": ["Beach/coastal", "Garden", "Minimal white wall", "Cafe terrace"],
-        "modelRequirements": "Size S model, 170-175cm. Natural pose, avoid stiff studio poses. Hair up for neckline visibility.",
+        "schemaVersion": "1.0",
+        "analysisText": "The assets show a blue and white floral bohemian dress with a flowing skirt. The strongest creative opportunity is movement-led vacation storytelling using walking and gentle turns. Avoid generic product slideshows, changing the floral pattern, or inventing unseen back details because the available reference only supports the front view.",
+        "analyzedAssetIds": ["fixture-asset-1"],
+        "model": "fixture-vision-model",
+        "analyzedAt": "2026-01-01T00:00:00Z",
     },
     "reference_video_analysis": {
         "title": "Summer Collection BTS",
@@ -417,11 +413,10 @@ def _text_llm_api_key() -> str:
 
 
 def _is_fake_mode(task_type: str) -> bool:
+    if settings.force_fake_llm:
+        return True
     if task_type == "materials":
         return not (settings.enable_image_generation or settings.enable_video_generation)
-    # M4: Fashion Creative Loop tasks always use fake fixtures
-    if task_type in FASHION_FIXTURES:
-        return True
     return not _text_llm_api_key()
 
 
@@ -442,7 +437,7 @@ async def call_llm(task_type: str, system_prompt: str, user_prompt: str, model: 
             "Use image/video generation services for paid media generation."
         )
 
-    text_model = model if model != "gpt-4o" else settings.text_llm_model
+    text_model = model if model != "gpt-4o" else (settings.text_llm_model or settings.vision_llm_model)
     provider = settings.text_llm_provider.lower()
 
     if provider in {"openai", "openai_compatible"}:
@@ -453,31 +448,225 @@ async def call_llm(task_type: str, system_prompt: str, user_prompt: str, model: 
     raise RuntimeError(f"Unsupported TEXT_LLM_PROVIDER: {settings.text_llm_provider}")
 
 
+async def call_llm_with_images(
+    task_type: str,
+    system_prompt: str,
+    user_prompt: str,
+    image_urls: list[str],
+    model: str = "gpt-4o",
+) -> dict:
+    """Call an OpenAI-compatible vision model with image_url inputs."""
+    if _is_fake_mode(task_type):
+        fixture = FIXTURES.get(task_type) or FASHION_FIXTURES.get(task_type)
+        if fixture is None:
+            raise ValueError(f"No fixture defined for task_type: {task_type}")
+        log.info("FAKE vision LLM call: task_type=%s, model=%s", task_type, model)
+        return fixture
+
+    if task_type not in TEXT_TASK_TYPES:
+        raise RuntimeError(
+            f"task_type={task_type} is not a text/vision LLM task. "
+            "Use image/video generation services for paid media generation."
+        )
+
+    provider = (settings.vision_llm_provider or settings.text_llm_provider).lower()
+    vision_model = settings.vision_llm_model or model
+    if vision_model == "gpt-4o":
+        vision_model = settings.text_llm_model
+    clean_image_urls = [url for url in image_urls if isinstance(url, str) and url.strip()]
+
+    if provider not in {"openai", "openai_compatible"}:
+        raise RuntimeError(
+            f"Vision input is only wired for OpenAI-compatible providers, got: {settings.text_llm_provider}"
+        )
+
+    return await _call_openai_vision(task_type, system_prompt, user_prompt, clean_image_urls, vision_model)
+
+
 async def _call_openai(task_type: str, system_prompt: str, user_prompt: str, model: str) -> dict:
     try:
         from openai import AsyncOpenAI
     except ImportError:
         raise RuntimeError("openai package not installed")
 
-    api_key = settings.text_llm_api_key or settings.openai_api_key
-    base_url = settings.text_llm_base_url or settings.openai_base_url or None
-    client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-    response = await client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.7,
-        response_format={"type": "json_object"},
+    api_key = settings.text_llm_api_key or settings.vision_llm_api_key or settings.openai_api_key
+    base_url = settings.text_llm_base_url or settings.vision_llm_base_url or settings.openai_base_url or None
+    client = AsyncOpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        timeout=settings.text_llm_timeout_seconds,
     )
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    response = await _create_chat_completion(client, model, messages)
     content = response.choices[0].message.content or "{}"
     tokens_in = response.usage.prompt_tokens if response.usage else 0
     tokens_out = response.usage.completion_tokens if response.usage else 0
 
-    log.info("LLM call: task_type=%s, model=%s, tokens_in=%d, tokens_out=%d",
+    log.info("Text LLM call: task_type=%s, model=%s, tokens_in=%d, tokens_out=%d",
              task_type, model, tokens_in, tokens_out)
     return _parse_llm_json(content)
+
+
+async def _call_openai_vision(
+    task_type: str,
+    system_prompt: str,
+    user_prompt: str,
+    image_urls: list[str],
+    model: str,
+) -> dict:
+    try:
+        from openai import AsyncOpenAI
+    except ImportError:
+        raise RuntimeError("openai package not installed")
+
+    api_key = settings.vision_llm_api_key or settings.text_llm_api_key or settings.openai_api_key
+    base_url = settings.vision_llm_base_url or settings.text_llm_base_url or settings.openai_base_url or None
+    client = AsyncOpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        timeout=settings.text_llm_timeout_seconds,
+    )
+
+    prepared_image_urls = await _prepare_vision_image_urls(image_urls)
+
+    content: list[dict] = [{"type": "text", "text": user_prompt}]
+    for url in prepared_image_urls:
+        content.append({"type": "image_url", "image_url": {"url": url}})
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": content},
+    ]
+    log.info(
+        "Vision LLM request: task_type=%s, model=%s, images=%d, timeout=%ss",
+        task_type,
+        model,
+        len(prepared_image_urls),
+        settings.text_llm_timeout_seconds,
+    )
+    response = await _create_chat_completion(client, model, messages)
+    content_text = response.choices[0].message.content or "{}"
+    tokens_in = response.usage.prompt_tokens if response.usage else 0
+    tokens_out = response.usage.completion_tokens if response.usage else 0
+
+    log.info(
+        "Vision LLM call: task_type=%s, model=%s, images=%d, tokens_in=%d, tokens_out=%d",
+        task_type, model, len(prepared_image_urls), tokens_in, tokens_out,
+    )
+    return _parse_llm_json(content_text)
+
+
+async def _prepare_vision_image_urls(image_urls: list[str]) -> list[str]:
+    """Prepare image inputs for OpenAI-compatible vision APIs.
+
+    Many providers can accept remote image URLs, but they fetch those URLs from the
+    provider side. E-commerce image hosts often block unknown data-center fetches,
+    which causes long hangs. By default we download images locally and send data
+    URLs so the vision model receives the actual bytes.
+    """
+    if not settings.vision_llm_inline_images:
+        return image_urls
+
+    prepared: list[str] = []
+    failures: list[str] = []
+    for url in image_urls:
+        if url.startswith("data:"):
+            prepared.append(url)
+            continue
+        try:
+            prepared.append(await _download_image_as_data_url(url))
+        except Exception as exc:
+            failures.append(f"{_safe_url_for_log(url)}: {exc}")
+
+    if failures:
+        log.warning("Failed to inline %d vision image(s): %s", len(failures), "; ".join(failures))
+
+    if image_urls and not prepared:
+        raise RuntimeError(
+            "No vision images could be downloaded for inline analysis. "
+            "Check that the task asset image URL is publicly reachable from the Python service."
+        )
+
+    return prepared
+
+
+async def _download_image_as_data_url(url: str) -> str:
+    timeout = settings.vision_llm_image_download_timeout_seconds
+    async with httpx.AsyncClient(
+        timeout=httpx.Timeout(timeout),
+        follow_redirects=True,
+        headers={
+            "User-Agent": "Mozilla/5.0 (compatible; TK-AI-Video-Orchestrator/1.0)",
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        },
+    ) as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        data = response.content
+
+    max_bytes = settings.vision_llm_max_image_bytes
+    if len(data) > max_bytes:
+        raise RuntimeError(f"image is too large: {len(data)} bytes > {max_bytes} bytes")
+
+    content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
+    if not content_type or not content_type.startswith("image/"):
+        parsed_path = urlparse(url).path.lower()
+        if parsed_path.endswith(".png"):
+            content_type = "image/png"
+        elif parsed_path.endswith(".webp"):
+            content_type = "image/webp"
+        elif parsed_path.endswith(".gif"):
+            content_type = "image/gif"
+        else:
+            content_type = "image/jpeg"
+
+    encoded = base64.b64encode(data).decode("ascii")
+    return f"data:{content_type};base64,{encoded}"
+
+
+def _safe_url_for_log(url: str) -> str:
+    parsed = urlparse(url)
+    safe = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+    return safe[:160]
+
+
+async def _create_chat_completion(client, model: str, messages: list[dict]):
+    """Create a JSON chat completion, retrying without response_format for providers that reject it."""
+    try:
+        return await asyncio.wait_for(
+            client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.7,
+                response_format={"type": "json_object"},
+            ),
+            timeout=settings.text_llm_timeout_seconds,
+        )
+    except (asyncio.TimeoutError, TimeoutError) as exc:
+        raise RuntimeError(
+            f"LLM request timed out after {settings.text_llm_timeout_seconds:g}s: model={model}"
+        ) from exc
+    except Exception as exc:
+        message = str(exc).lower()
+        if "response_format" not in message and "json_object" not in message:
+            raise
+        log.warning("Provider rejected response_format=json_object; retrying without response_format: %s", exc)
+        try:
+            return await asyncio.wait_for(
+                client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=0.7,
+                ),
+                timeout=settings.text_llm_timeout_seconds,
+            )
+        except (asyncio.TimeoutError, TimeoutError) as timeout_exc:
+            raise RuntimeError(
+                f"LLM request timed out after {settings.text_llm_timeout_seconds:g}s: model={model}"
+            ) from timeout_exc
 
 
 async def _call_anthropic(task_type: str, system_prompt: str, user_prompt: str, model: str) -> dict:
@@ -487,20 +676,28 @@ async def _call_anthropic(task_type: str, system_prompt: str, user_prompt: str, 
         raise RuntimeError("anthropic package not installed")
 
     api_key = settings.text_llm_api_key or settings.anthropic_api_key
-    client = AsyncAnthropic(api_key=api_key)
+    base_url = settings.text_llm_base_url or None
+    client = AsyncAnthropic(api_key=api_key, base_url=base_url)
     response = await client.messages.create(
         model=model or "claude-sonnet-4-6",
         max_tokens=4096,
         system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
     )
-    content = response.content[0].text if response.content else "{}"
+    # DeepSeek and other providers may return ThinkingBlock alongside TextBlock.
+    # Extract text from the first TextBlock, skipping thinking/reasoning blocks.
+    content_text = "{}"
+    if response.content:
+        for block in response.content:
+            if hasattr(block, "text"):
+                content_text = block.text
+                break
     tokens_in = response.usage.input_tokens if response.usage else 0
     tokens_out = response.usage.output_tokens if response.usage else 0
 
     log.info("LLM call: task_type=%s, model=%s, tokens_in=%d, tokens_out=%d",
              task_type, model, tokens_in, tokens_out)
-    return _parse_llm_json(content)
+    return _parse_llm_json(content_text)
 
 
 def _parse_llm_json(raw: str) -> dict:

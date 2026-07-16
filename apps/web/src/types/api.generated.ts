@@ -61,6 +61,19 @@ export interface paths {
       };
     };
   };
+  "/api/users/me": {
+    /** Get current user profile */
+    get: {
+      responses: {
+        /** @description Current user info */
+        200: {
+          content: {
+            "application/json": components["schemas"]["ApiResponse"];
+          };
+        };
+      };
+    };
+  };
   "/api/products": {
     /** List current user's products */
     get: {
@@ -176,6 +189,28 @@ export interface paths {
       };
     };
   };
+  "/api/fashion-video-tasks": {
+    /**
+     * Create fashion creative task (aggregate: product + task + assets + creative state)
+     * @description Single atomic call that creates product, video task, initial assets, and creative state
+     * in one transaction. Preferred over the multi-call flow for Fashion Creative Loop V1.
+     */
+    post: {
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["CreateFashionTaskRequest"];
+        };
+      };
+      responses: {
+        /** @description Task created */
+        200: {
+          content: {
+            "application/json": components["schemas"]["FashionTaskCreateResponse"];
+          };
+        };
+      };
+    };
+  };
   "/api/video-tasks/{taskId}": {
     /** Get task status and detail */
     get: {
@@ -260,6 +295,24 @@ export interface paths {
       };
     };
   };
+  "/api/video-tasks/{taskId}/cancel": {
+    /** Cancel an in-progress task */
+    post: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+        };
+      };
+      responses: {
+        /** @description Task cancelled */
+        200: {
+          content: {
+            "application/json": components["schemas"]["VideoTaskStatusResponse"];
+          };
+        };
+      };
+    };
+  };
   "/api/video-tasks/{taskId}/assets": {
     /** List task assets */
     get: {
@@ -315,6 +368,81 @@ export interface paths {
       };
       responses: {
         /** @description Role updated */
+        200: {
+          content: {
+            "application/json": components["schemas"]["TaskAssetListResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/video-tasks/{taskId}/assets/{assetId}": {
+    /**
+     * Delete task asset
+     * @description Delete an uploaded task asset while the task is still in asset upload or asset confirmation stage.
+     */
+    delete: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+          assetId: string;
+        };
+      };
+      responses: {
+        /** @description Asset deleted */
+        200: {
+          content: {
+            "application/json": components["schemas"]["TaskAssetListResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/video-tasks/{taskId}/assets/generate-image": {
+    /**
+     * Generate or edit a task-level product image
+     * @description Generate one AI image candidate from existing task assets and user instruction. The generated image is saved as an unconfirmed task asset with source=ai_generated.
+     */
+    post: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["GenerateAssetImageRequest"];
+        };
+      };
+      responses: {
+        /** @description Generated asset saved */
+        200: {
+          content: {
+            "application/json": components["schemas"]["TaskAssetListResponse"];
+          };
+        };
+      };
+    };
+  };
+  "/api/video-tasks/{taskId}/assets/{assetId}/regenerate-image": {
+    /**
+     * Regenerate an AI-generated task image with user feedback
+     * @description Create a new unconfirmed AI image candidate from a previous generated asset, preserving regeneration context in task asset metadata.
+     */
+    post: {
+      parameters: {
+        path: {
+          taskId: components["parameters"]["TaskId"];
+          assetId: string;
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["RegenerateAssetImageRequest"];
+        };
+      };
+      responses: {
+        /** @description Regenerated asset saved */
         200: {
           content: {
             "application/json": components["schemas"]["TaskAssetListResponse"];
@@ -1053,7 +1181,7 @@ export interface components {
       name: string;
       description?: string;
       productLink?: string;
-      /** @description Optional for non-product-first Fashion Creative Loop modes. Product creative mode should still provide at least one product image. */
+      /** @description Optional initial product images. Fashion Creative Loop tasks can be created without images; required product images are collected and confirmed on the task assets page. */
       imageUrls?: string[];
       /** @example US */
       targetMarket: string;
@@ -1124,6 +1252,45 @@ export interface components {
       productCategory?: string | null;
       shotCount?: number | null;
     };
+    CreateFashionTaskRequest: {
+      name: string;
+      description?: string;
+      productLink?: string;
+      /** @description Optional initial product images. Fashion Creative Loop tasks can be created without images; required product images are collected and confirmed on the task assets page. */
+      imageUrls?: string[];
+      /** @enum {string} */
+      targetMarket: "US" | "UK" | "JP";
+      /** @enum {string} */
+      language: "en" | "zh" | "ja";
+      /** @enum {integer} */
+      duration: 15 | 20 | 25 | 30;
+      videoType?: components["schemas"]["VideoType"];
+      /** @default true */
+      needSubtitles?: boolean;
+      taskMode?: components["schemas"]["TaskMode"];
+      productCategory?: string | null;
+      shotCount?: number | null;
+      /** @description Required when taskMode is REFERENCE_STORYBOARD */
+      referenceVideoUrl?: string;
+      /** @description Required when taskMode is USER_SCRIPT */
+      scriptText?: string;
+      /** @description Required when taskMode is CUSTOM_STORYBOARD */
+      storyboardText?: string;
+      /** @description Free-form creative direction preserved verbatim and passed to downstream AI stages. */
+      creativePrompt?: string;
+    };
+    FashionTaskCreateResponse: {
+      code?: number;
+      message?: string;
+      data?: {
+        /** Format: uuid */
+        taskId?: string;
+        /** Format: uuid */
+        productId?: string;
+        status?: components["schemas"]["VideoTaskStatus"];
+        progress?: number;
+      };
+    };
     CreateVideoTaskResponse: {
       code?: number;
       message?: string;
@@ -1147,6 +1314,8 @@ export interface components {
       needVoiceover?: boolean;
       /** Format: uuid */
       selectedPlanId?: string | null;
+      selectedPlanTitle?: string | null;
+      assetAnalysis?: components["schemas"]["FashionAssetAnalysis"] | null;
       taskMode?: components["schemas"]["TaskMode"];
       productCategory?: string | null;
       shotCount?: number | null;
@@ -1160,6 +1329,15 @@ export interface components {
       /** @example 1.0.0 */
       schemaVersion?: string;
       retryCount?: number;
+    };
+    FashionAssetAnalysis: {
+      /** @enum {string} */
+      schemaVersion: "1.0";
+      analysisText: string;
+      analyzedAssetIds: string[];
+      model: string;
+      /** Format: date-time */
+      analyzedAt: string;
     };
     VideoTaskDetailResponse: {
       code?: number;
@@ -1632,6 +1810,9 @@ export interface components {
     FeedbackRequest: {
       feedbackText: string;
       category?: string;
+      /** @enum {string} */
+      targetType?: "storyboard" | "keyframe" | "video_clip" | "render_manifest" | "final_video" | "plan";
+      targetId?: string | null;
     };
     QaResult: {
       /** Format: uuid */
@@ -1705,6 +1886,18 @@ export interface components {
     };
     ConfirmAssetsRequest: {
       assetIds?: string[];
+    };
+    GenerateAssetImageRequest: {
+      prompt: string;
+      sourceAssetIds?: string[];
+      /**
+       * @default image_variant
+       * @enum {string}
+       */
+      assetRole?: "generated_result" | "image_variant";
+    };
+    RegenerateAssetImageRequest: {
+      feedback: string;
     };
     ConfirmPlanRequest: {
       /** Format: uuid */

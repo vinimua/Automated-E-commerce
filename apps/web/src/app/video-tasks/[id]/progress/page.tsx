@@ -120,6 +120,18 @@ export default function TaskProgressPage() {
   const isFashionKeyframeStage = ["keyframe_configuring", "image_generating", "waiting_image_confirmation"].includes(task.status);
   const isFashionClipStage = ["video_clip_generating", "waiting_video_clip_confirmation"].includes(task.status);
   const isFashionReviewStage = ["waiting_final_review", "repairing", "rendering"].includes(task.status);
+  const canViewStoryboard = [
+    "waiting_storyboard_confirmation",
+    "keyframe_configuring",
+    "image_generating",
+    "waiting_image_confirmation",
+    "video_clip_generating",
+    "waiting_video_clip_confirmation",
+    "rendering",
+    "waiting_final_review",
+    "completed",
+    "exported",
+  ].includes(task.status);
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 p-8">
@@ -129,7 +141,7 @@ export default function TaskProgressPage() {
           ← 返回工作台
         </Link>
         <h1 className="mt-2 text-2xl font-bold">
-          {TASK_MODE_LABELS[task.taskMode] || "创作任务"}
+          {task.selectedPlanTitle || TASK_MODE_LABELS[task.taskMode] || "创作任务"}
           <span className="ml-2 text-base font-normal text-muted-foreground">{task.duration}s</span>
         </h1>
         {task.videoType && (
@@ -155,11 +167,11 @@ export default function TaskProgressPage() {
       </div>
 
       {/* Progress bar */}
-      <TaskProgress status={task.status} errorMessage={task.errorMessage} />
+      <TaskProgress status={task.status} errorMessage={task.errorMessage} taskMode={task.taskMode} />
 
       {/* Action links based on state */}
       <div className="space-y-4">
-        {task.selectedPlanId && !isTerminal && (
+        {canViewStoryboard && (
           <Link
             href={`/video-tasks/${id}/storyboard`}
             className="block rounded-lg border bg-card p-4 text-center text-sm font-medium text-primary hover:bg-accent transition-colors"
@@ -169,6 +181,14 @@ export default function TaskProgressPage() {
         )}
 
         {/* Fashion Creative Loop V1 action links */}
+        {["plan_generating", "waiting_plan_selection"].includes(task.status) && (
+          <Link
+            href={`/video-tasks/${id}/plans`}
+            className="block rounded-lg border border-amber-500/50 bg-amber-50 p-4 text-center text-sm font-medium text-amber-700 hover:bg-amber-100 transition-colors"
+          >
+            📋 选择视频方案 →
+          </Link>
+        )}
         {isFashionAssetStage && (
           <Link
             href={`/video-tasks/${id}/assets`}

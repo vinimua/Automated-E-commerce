@@ -27,6 +27,17 @@ class Settings:
     text_llm_model: str = os.getenv("TEXT_LLM_MODEL", "gpt-4o-mini")
     text_llm_api_key: str = os.getenv("TEXT_LLM_API_KEY", "")
     text_llm_base_url: str = os.getenv("TEXT_LLM_BASE_URL", "")
+    text_llm_timeout_seconds: float = float(os.getenv("TEXT_LLM_TIMEOUT_SECONDS", "120"))
+    vision_llm_provider: str = os.getenv("VISION_LLM_PROVIDER", "")
+    vision_llm_model: str = os.getenv("VISION_LLM_MODEL", "")
+    vision_llm_api_key: str = os.getenv("VISION_LLM_API_KEY", "")
+    vision_llm_base_url: str = os.getenv("VISION_LLM_BASE_URL", "")
+    vision_llm_inline_images: bool = os.getenv("VISION_LLM_INLINE_IMAGES", "true").lower() == "true"
+    vision_llm_image_download_timeout_seconds: float = float(
+        os.getenv("VISION_LLM_IMAGE_DOWNLOAD_TIMEOUT_SECONDS", "20")
+    )
+    vision_llm_max_image_bytes: int = int(os.getenv("VISION_LLM_MAX_IMAGE_BYTES", str(8 * 1024 * 1024)))
+    force_fake_llm: bool = os.getenv("FORCE_FAKE_LLM", "false").lower() == "true"
 
     # Legacy provider envs are still supported as fallbacks.
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")

@@ -1,11 +1,11 @@
 package com.tk.ai.video.module.callback.service.impl;
-import java.util.UUID;
 
-import com.tk.ai.video.common.ResourceNotFoundException;
+import com.tk.ai.video.common.BusinessException;
 import com.tk.ai.video.module.callback.dto.RenderCallbackRequest;
 import com.tk.ai.video.module.callback.service.RenderCallbackService;
 import com.tk.ai.video.module.log.entity.RenderLogEntity;
 import com.tk.ai.video.module.log.mapper.RenderLogMapper;
+import com.tk.ai.video.module.repairevent.mapper.RepairEventMapper;
 import com.tk.ai.video.module.video.entity.VideoEntity;
 import com.tk.ai.video.module.video.mapper.VideoMapper;
 import com.tk.ai.video.module.videotask.entity.VideoTaskEntity;
@@ -15,9 +15,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -27,133 +30,202 @@ public class RenderCallbackServiceImpl implements RenderCallbackService {
     private final VideoTaskMapper videoTaskMapper;
     private final VideoMapper videoMapper;
     private final RenderLogMapper renderLogMapper;
+    private final RepairEventMapper repairEventMapper;
 
     @Override
     @Transactional
     public void handleCallback(RenderCallbackRequest request) {
-        VideoTaskEntity task = videoTaskMapper.selectById(request.getTaskId());
+        UUID taskId = request.getTaskId();
+        VideoTaskEntity task = videoTaskMapper.selectById(taskId);
         if (task == null) {
-            throw new ResourceNotFoundException("VideoTask", request.getTaskId());
+            throw new BusinessException("Task not found: " + taskId);
+        }
+
+        if (StringUtils.hasText(task.getRenderTaskId())
+                && StringUtils.hasText(request.getRenderTaskId())
+                && !task.getRenderTaskId().equals(request.getRenderTaskId())) {
+            log.warn("Render callback ignored because renderTaskId does not match: taskId={}, expected={}, actual={}",
+                    taskId, task.getRenderTaskId(), request.getRenderTaskId());
+            return;
+        }
+
+        if (!"rendering".equals(task.getStatus())) {
+            log.warn("Render callback ignored because task is not rendering: taskId={}, status={}",
+                    taskId, task.getStatus());
+            return;
         }
 
         if ("completed".equals(request.getStatus())) {
-            handleRenderSuccess(request, task);
+            handleCompleted(request, task);
         } else {
-            handleRenderFailed(request, task);
+            handleFailed(request, task);
         }
     }
 
-    private void handleRenderSuccess(RenderCallbackRequest request, VideoTaskEntity task) {
-        if (isRenderAlreadyCompleted(request, task)) {
-            log.debug("Render callback already processed: taskId={}, renderTaskId={}", task.getId(), request.getRenderTaskId());
-            return;
+    private void handleCompleted(RenderCallbackRequest request, VideoTaskEntity task) {
+        if (!StringUtils.hasText(request.getVideoUrl())) {
+            throw new BusinessException("videoUrl is required when render callback status is completed");
         }
 
-        if (!"rendering".equals(task.getStatus()) && !"checking".equals(task.getStatus())) {
-            VideoTaskStateMachine.validateTransition(task.getStatus(), "checking");
-        }
+        UUID videoId = request.getVideoId() != null ? request.getVideoId() : extractVideoId(task);
+        final boolean[] createdNewVideo = {false};
+        VideoEntity video = videoMapper.findLatestByTaskId(task.getId()).orElseGet(() -> {
+            createdNewVideo[0] = true;
+            VideoEntity created = new VideoEntity();
+            created.setId(videoId != null ? videoId : UUID.randomUUID());
+            created.setTaskId(task.getId());
+            created.setProductId(task.getProductId());
+            created.setUserId(task.getUserId());
+            return created;
+        });
 
-        VideoEntity video = new VideoEntity();
-        video.setId(request.getVideoId() != null ? request.getVideoId() : UUID.randomUUID());
-        video.setTaskId(task.getId());
-        video.setProductId(task.getProductId());
-        video.setUserId(task.getUserId());
-        video.setTitle(request.getRenderLog() != null
-                ? (String) request.getRenderLog().getOrDefault("template", "video")
-                : "Generated Video");
+        video.setTitle(extractTitle(task));
         video.setVideoUrl(request.getVideoUrl());
         video.setCoverUrl(request.getCoverUrl());
         video.setDuration(request.getDuration() != null ? request.getDuration() : task.getDuration());
-        video.setResolution(request.getResolution() != null ? request.getResolution() : "1080x1920");
+        video.setResolution(StringUtils.hasText(request.getResolution()) ? request.getResolution() : "1080x1920");
         video.setFps(30);
         video.setStatus("completed");
-        videoMapper.insert(video);
-
-        writeRenderLog(request, task, video);
-
-        if ("rendering".equals(task.getStatus())) {
-            advanceTask(task, "checking");
+        if (createdNewVideo[0]) {
+            videoMapper.insert(video);
+        } else {
+            videoMapper.updateById(video);
         }
-        advanceTask(task, "completed");
-        task.setProgress(100);
-        task.setRenderTaskId(request.getRenderTaskId());
-        if (request.getManifestVersion() != null) {
-            task.setManifestVersion(request.getManifestVersion());
-        }
-        task.setCompletedAt(OffsetDateTime.now());
+
+        insertRenderLog(request, task, video.getId(), "completed", null);
+
+        VideoTaskStateMachine.validateTransition(task.getStatus(), "waiting_final_review");
+        task.setStatus("waiting_final_review");
+        task.setProgress(95);
+        task.setDuration(video.getDuration());
         task.setUpdatedAt(OffsetDateTime.now());
         videoTaskMapper.updateById(task);
+        completeActiveRenderRepairEvent(task);
 
-        log.info("Render completed: taskId={}, videoId={}", task.getId(), video.getId());
+        log.info("Render completed: taskId={}, videoId={}, videoUrl={}, duration={}s",
+                task.getId(), video.getId(), request.getVideoUrl(), video.getDuration());
     }
 
-    private void handleRenderFailed(RenderCallbackRequest request, VideoTaskEntity task) {
-        if ("failed".equals(task.getStatus())
-                && request.getRenderTaskId() != null
-                && request.getRenderTaskId().equals(task.getRenderTaskId())) {
-            log.debug("Render failure callback already processed: taskId={}, renderTaskId={}", task.getId(), request.getRenderTaskId());
-            return;
-        }
+    private void handleFailed(RenderCallbackRequest request, VideoTaskEntity task) {
+        String errorCode = extractErrorString(request, "errorCode", "RENDER_FAILED");
+        String errorMessage = extractErrorString(request, "errorMessage", "Render failed");
+        boolean retryable = extractRetryable(request);
 
-        if (request.getError() != null) {
-            task.setFailedStage("rendering");
-            task.setErrorCode((String) request.getError().get("errorCode"));
-            task.setErrorMessage((String) request.getError().get("errorMessage"));
-            task.setErrorRetryable(Boolean.TRUE.equals(request.getError().get("retryable")));
-        }
-        if (!"failed".equals(task.getStatus())) {
-            VideoTaskStateMachine.validateTransition(task.getStatus(), "failed");
-        }
-        task.setRenderTaskId(request.getRenderTaskId());
+        insertRenderLog(request, task, null, "failed", errorMessage);
+
+        VideoTaskStateMachine.validateTransition(task.getStatus(), "failed");
         task.setStatus("failed");
+        task.setFailedStage("rendering");
+        task.setErrorCode(errorCode);
+        task.setErrorMessage(errorMessage);
+        task.setErrorRetryable(retryable);
         task.setUpdatedAt(OffsetDateTime.now());
         videoTaskMapper.updateById(task);
-        writeRenderLog(request, task, null);
+        failActiveRenderRepairEvent(task, errorMessage);
 
-        log.info("Render failed: taskId={}, error={}", task.getId(), task.getErrorCode());
+        log.warn("Render failed: taskId={}, error={}, message={}",
+                task.getId(), errorCode, errorMessage);
     }
 
-    private boolean isRenderAlreadyCompleted(RenderCallbackRequest request, VideoTaskEntity task) {
-        if (request.getRenderTaskId() != null && request.getRenderTaskId().equals(task.getRenderTaskId())
-                && ("completed".equals(task.getStatus()) || "exported".equals(task.getStatus()))) {
-            return true;
+    private void insertRenderLog(RenderCallbackRequest request, VideoTaskEntity task, UUID videoId, String status, String errorMessage) {
+        RenderLogEntity logEntity = new RenderLogEntity();
+        logEntity.setId(UUID.randomUUID());
+        logEntity.setTaskId(task.getId());
+        logEntity.setVideoId(videoId);
+        logEntity.setRenderTaskId(request.getRenderTaskId());
+        logEntity.setTemplate(extractTemplate(task));
+        logEntity.setStatus(status);
+        logEntity.setDurationSeconds(request.getDuration());
+        logEntity.setOutputUrl(request.getVideoUrl());
+        logEntity.setCoverUrl(request.getCoverUrl());
+        logEntity.setErrorMessage(errorMessage);
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        if (request.getRenderLog() != null) {
+            metadata.putAll(request.getRenderLog());
         }
-        return videoMapper.findLatestByTaskId(task.getId()).isPresent()
-                && ("completed".equals(task.getStatus()) || "exported".equals(task.getStatus()));
+        metadata.put("manifestVersion", request.getManifestVersion());
+        metadata.put("callbackStatus", request.getStatus());
+        metadata.put("error", request.getError());
+        logEntity.setMetadata(metadata);
+        renderLogMapper.insert(logEntity);
     }
 
-    private void advanceTask(VideoTaskEntity task, String targetStatus) {
+    private UUID extractVideoId(VideoTaskEntity task) {
+        Map<String, Object> manifest = task.getRenderManifest();
+        if (manifest == null || manifest.get("videoId") == null) {
+            return null;
+        }
         try {
-            VideoTaskStateMachine.validateTransition(task.getStatus(), targetStatus);
-        } catch (Exception e) {
-            log.warn("Task transition skipped: taskId={}, {} -> {}", task.getId(), task.getStatus(), targetStatus);
-            return;
+            return UUID.fromString(String.valueOf(manifest.get("videoId")));
+        } catch (IllegalArgumentException ignored) {
+            return null;
         }
-        task.setStatus(targetStatus);
     }
 
-    private void writeRenderLog(RenderCallbackRequest request, VideoTaskEntity task, VideoEntity video) {
-        RenderLogEntity renderLog = new RenderLogEntity();
-        renderLog.setId(UUID.randomUUID());
-        renderLog.setTaskId(task.getId());
-        renderLog.setVideoId(video != null ? video.getId() : null);
-        renderLog.setRenderTaskId(request.getRenderTaskId());
-        renderLog.setTemplate(readTemplate(request.getRenderLog()));
-        renderLog.setStatus("completed".equals(request.getStatus()) ? "success" : "failed");
-        renderLog.setDurationSeconds(request.getDuration());
-        renderLog.setOutputUrl(request.getVideoUrl());
-        renderLog.setCoverUrl(request.getCoverUrl());
-        renderLog.setMetadata(request.getRenderLog());
-        if (request.getError() != null) {
-            renderLog.setErrorMessage((String) request.getError().get("errorMessage"));
+    private String extractTitle(VideoTaskEntity task) {
+        Map<String, Object> manifest = task.getRenderManifest();
+        if (manifest != null && manifest.get("cover") instanceof Map<?, ?> cover && cover.get("text") != null) {
+            return String.valueOf(cover.get("text"));
         }
-        renderLogMapper.insert(renderLog);
+        return "Generated video";
     }
 
-    private String readTemplate(Map<String, Object> renderLog) {
-        if (renderLog != null && renderLog.get("template") instanceof String template && !template.isBlank()) {
-            return template;
+    private String extractTemplate(VideoTaskEntity task) {
+        Map<String, Object> manifest = task.getRenderManifest();
+        if (manifest != null && manifest.get("template") != null) {
+            return String.valueOf(manifest.get("template"));
         }
-        return "unknown";
+        return null;
+    }
+
+    private String extractErrorString(RenderCallbackRequest request, String key, String fallback) {
+        if ("errorCode".equals(key) && StringUtils.hasText(request.getErrorCode())) {
+            return request.getErrorCode();
+        }
+        if ("errorMessage".equals(key) && StringUtils.hasText(request.getErrorMessage())) {
+            return request.getErrorMessage();
+        }
+        if (request.getError() != null && request.getError().get(key) != null) {
+            return String.valueOf(request.getError().get(key));
+        }
+        return fallback;
+    }
+
+    private boolean extractRetryable(RenderCallbackRequest request) {
+        if (request.getError() != null && request.getError().get("retryable") instanceof Boolean retryable) {
+            return retryable;
+        }
+        return false;
+    }
+
+    private void completeActiveRenderRepairEvent(VideoTaskEntity task) {
+        repairEventMapper.findByTaskId(task.getId()).stream()
+                .filter(event -> "in_progress".equals(event.getStatus()))
+                .filter(event -> "render_manifest".equals(event.getTargetType()) || "final_video".equals(event.getTargetType()))
+                .findFirst()
+                .ifPresent(event -> {
+                    event.setStatus("completed");
+                    event.setAfterVersion(task.getCurrentVersion());
+                    event.setUpdatedAt(OffsetDateTime.now());
+                    repairEventMapper.updateById(event);
+                });
+    }
+
+    private void failActiveRenderRepairEvent(VideoTaskEntity task, String errorMessage) {
+        repairEventMapper.findByTaskId(task.getId()).stream()
+                .filter(event -> "in_progress".equals(event.getStatus()))
+                .filter(event -> "render_manifest".equals(event.getTargetType()) || "final_video".equals(event.getTargetType()))
+                .findFirst()
+                .ifPresent(event -> {
+                    event.setStatus("failed");
+                    Map<String, Object> plan = event.getRepairPlan() != null
+                            ? new LinkedHashMap<>(event.getRepairPlan())
+                            : new LinkedHashMap<>();
+                    plan.put("errorMessage", errorMessage);
+                    event.setRepairPlan(plan);
+                    event.setUpdatedAt(OffsetDateTime.now());
+                    repairEventMapper.updateById(event);
+                });
     }
 }

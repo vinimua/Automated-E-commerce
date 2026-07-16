@@ -257,6 +257,34 @@ render_logs
 
 通过 Flyway 新增以下表。
 
+### 5.0 video_tasks 扩展字段
+
+`video_tasks` 继续作为任务主状态表。Fashion Creative Loop 需要在任务级保存素材分析结果，避免复用 `products` 的 V1 商品分析字段。
+
+```sql
+ALTER TABLE video_tasks
+    ADD COLUMN IF NOT EXISTS asset_analysis JSONB;
+```
+
+`asset_analysis` 保存 `asset_analysis` 回调返回的 `FashionAssetAnalysis`：
+
+```json
+{
+  "schemaVersion": "1.0",
+  "analysisText": "视觉模型对本次任务已确认素材的完整自然语言分析。",
+  "analyzedAssetIds": ["asset-1", "asset-2"],
+  "model": "vision-model",
+  "analyzedAt": "2026-07-13T12:00:00Z"
+}
+```
+
+设计约束：
+
+1. `asset_analysis` 是任务级结果，属于当前视频任务，不写入 `products` 的品类、卖点、场景等 V1 遗留字段。
+2. `analysisText` 是后续方案和分镜生成真正消费的内容。
+3. `analyzedAssetIds`、`model`、`analyzedAt` 用于排查、判断素材是否变化和前端展示，不承担创意语义。
+4. 如果 `analyzedAssetIds` 为空，说明本次分析没有读取到有效素材，不能视为素材分析链路完整通过。
+
 ### 5.1 task_assets
 
 保存挂载到任务上的上传素材和生成素材。
@@ -627,6 +655,40 @@ VIDEO_GEN_REQUIRE_APPROVAL=true
 3. Video Provider 负责短视频片段。
 4. Render Worker 负责最终合成。
 
+### 7.4 CreativeContext 组装
+
+方案生成和分镜生成统一消费 Java 在运行时组装的 `CreativeContext`，不要让 Python 重新查询业务库，也不要让前端直接拼 AI 输入。
+
+```json
+{
+  "productProfile": {},
+  "userRequest": {
+    "rawPrompt": "用户输入原文",
+    "parsed": {},
+    "confirmed": {}
+  },
+  "assetAnalysis": {
+    "schemaVersion": "1.0",
+    "analysisText": "素材分析得到的自然语言创意依据。",
+    "analyzedAssetIds": ["asset-1"],
+    "model": "vision-model",
+    "analyzedAt": "2026-07-13T12:00:00Z"
+  },
+  "workflow": {
+    "taskMode": "PRODUCT_CREATIVE",
+    "durationSeconds": 20,
+    "videoType": "product_showcase"
+  }
+}
+```
+
+消费规则：
+
+1. `creative_plan` 必须把 `assetAnalysis.analysisText` 当作视觉证据来源，用于生成差异化方案。
+2. `storyboard` 必须继续读取 `assetAnalysis.analysisText`，避免分镜凭空生成不可由素材支撑的画面。
+3. `assetAnalysis` 不替代用户要求；用户最新要求仍放在 `userRequest`，并与素材分析一起进入 Prompt。
+4. `CreativeContext` 是运行时对象，不单独建表持久化；持久化来源分别是 product、creative_state、video_tasks.asset_analysis 和任务参数。
+
 ## 8. AI 回调契约
 
 扩展 AI 回调阶段：
@@ -650,6 +712,8 @@ schemaVersion + stage + status + nextTaskStatus + error
 ```
 
 每个阶段只携带该阶段相关结果，避免一个回调承载过多含义。
+
+`asset_analysis` 成功回调必须携带 `fashionAssetAnalysis`，Java 持久化到 `video_tasks.asset_analysis`，并推进到 `waiting_asset_confirmation`。该回调不再复用 `products.selling_points`、`products.scenes`、`products.risk_tips` 等 V1 商品分析字段。
 
 ## 9. RenderManifest 策略
 
@@ -819,4 +883,3 @@ ENABLE_LANGGRAPH_REPAIR
 不要在用户未确认时生成昂贵视频。
 不要因为一个镜头错误就整条视频重来。
 ```
-

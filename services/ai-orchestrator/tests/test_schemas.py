@@ -31,47 +31,36 @@ from src.schemas.workflow_requests import (
 class TestFashionAssetAnalysis:
     def test_valid_minimal(self):
         data = {
-            "productCategory": "Dresses",
-            "styleAttributes": ["Casual", "Summer"],
-            "visualFeatures": {},
-            "recommendedAngles": ["Front"],
-            "assetQualityScore": 75,
+            "analysisText": "A summer dress shown from the front.",
+            "analyzedAssetIds": ["a1"],
+            "model": "vision-model",
+            "analyzedAt": "2026-07-11T12:00:00Z",
         }
         result = FashionAssetAnalysis.model_validate(data)
-        assert result.productCategory == "Dresses"
-        assert result.assetQualityScore == 75
+        assert result.analysisText.startswith("A summer dress")
+        assert result.analyzedAssetIds == ["a1"]
 
     def test_valid_full(self):
         data = {
-            "productCategory": "Women's Summer Dress",
-            "styleAttributes": ["Casual", "Bohemian", "Floral"],
-            "visualFeatures": {
-                "colors": ["White", "Blue"],
-                "patterns": ["Floral"],
-                "materials": ["Cotton"],
-                "fit": "A-line",
-                "occasions": ["Beach", "Brunch"],
-            },
-            "recommendedAngles": ["Front full-body", "Back detail", "Fabric close-up"],
-            "assetQualityScore": 82,
-            "missingAngles": ["360-degree spin"],
-            "lightingNotes": "Natural daylight recommended",
-            "backgroundRecommendations": ["Beach", "Garden"],
-            "modelRequirements": "Size S model",
+            "schemaVersion": "1.0",
+            "analysisText": "A bohemian floral summer dress; avoid inventing its back view.",
+            "analyzedAssetIds": ["a1", "a2"],
+            "model": "vision-model-v2",
+            "analyzedAt": "2026-07-11T12:00:00Z",
         }
         result = FashionAssetAnalysis.model_validate(data)
-        assert len(result.recommendedAngles) == 3
+        assert len(result.analyzedAssetIds) == 2
 
     def test_missing_required(self):
         with pytest.raises(Exception):
-            FashionAssetAnalysis.model_validate({"productCategory": "Dresses"})
+            FashionAssetAnalysis.model_validate({"analysisText": "Incomplete"})
 
-    def test_score_range(self):
+    def test_empty_analysis_text(self):
         data = {
-            "productCategory": "Dresses",
-            "styleAttributes": ["Casual"],
-            "recommendedAngles": ["Front"],
-            "assetQualityScore": 150,
+            "analysisText": "",
+            "analyzedAssetIds": [],
+            "model": "vision-model",
+            "analyzedAt": "2026-07-11T12:00:00Z",
         }
         with pytest.raises(Exception):
             FashionAssetAnalysis.model_validate(data)
@@ -240,10 +229,10 @@ class TestCallbackPayload:
             "status": "success",
             "nextTaskStatus": "waiting_asset_confirmation",
             "fashionAssetAnalysis": {
-                "productCategory": "Dresses",
-                "styleAttributes": ["Casual"],
-                "recommendedAngles": ["Front"],
-                "assetQualityScore": 80,
+                "analysisText": "Dress shown from the front",
+                "analyzedAssetIds": ["a1"],
+                "model": "vision-model",
+                "analyzedAt": "2026-07-11T12:00:00Z",
             },
         }
         result = CallbackPayload.model_validate(data)

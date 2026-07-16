@@ -23,4 +23,6 @@ public class RenderCallbackRequest {
     private String resolution;
     private Map<String, Object> renderLog;
     private Map<String, Object> error;
+    private String errorCode;
+    private String errorMessage;
 }

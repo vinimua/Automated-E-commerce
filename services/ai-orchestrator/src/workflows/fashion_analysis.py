@@ -67,7 +67,7 @@ class FashionAnalysisWorkflow:
             asset_analysis = await workflow.execute_activity(
                 "analyze_fashion_assets",
                 args=[task_id, product_context],
-                start_to_close_timeout=timedelta(minutes=2),
+                start_to_close_timeout=timedelta(minutes=5),
                 retry_policy=retry,
             )
         except Exception as e:

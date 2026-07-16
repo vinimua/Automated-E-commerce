@@ -1,11 +1,11 @@
 "use client";
 
 import { apiRequest } from "@/lib/api-client";
-import type { VideoTask, TaskMode, TaskAsset } from "@/types/api";
+import type { VideoTask, TaskMode, TaskAsset, TaskAssetListResponse, FashionAssetAnalysis } from "@/types/api";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useCallback, useRef } from "react";
-import { ArrowLeft, Upload, Image as ImageIcon, Video, Music, Pencil, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowLeft, Upload, Image as ImageIcon, Video, Music, Pencil, Trash2, CheckCircle2, Loader2 } from "lucide-react";
 import { CancelTaskButton } from "@/components/cancel-task-button";
 
 const ASSET_ROLE_LABELS: Record<string, string> = {
@@ -21,6 +21,14 @@ const KIND_ICON: Record<string, React.ReactNode> = {
   video: <Video className="h-4 w-4" />,
   audio: <Music className="h-4 w-4" />,
 };
+
+function isGeneratedImageAsset(asset: TaskAsset) {
+  return asset.assetKind === "image" && (
+    asset.source === "ai_generated" ||
+    asset.assetRole === "generated_result" ||
+    asset.assetRole === "image_variant"
+  );
+}
 
 // ── Mode-specific configuration ──
 const TASK_MODE_CONFIG: Record<TaskMode, {
@@ -64,6 +72,10 @@ export default function AssetsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [confirming, setConfirming] = useState(false);
+  const [creativePrompt, setCreativePrompt] = useState("");
+  const [imagePrompt, setImagePrompt] = useState("");
+  const [generatingImage, setGeneratingImage] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   // Upload form
   const [showUpload, setShowUpload] = useState(false);
@@ -89,7 +101,9 @@ export default function AssetsPage() {
           `/api/video-tasks/${id}/creative-state`
         ).catch(() => ({ code: 0, message: "ok", data: null })),
       ]);
-      if (taskRes.code === 0 && taskRes.data) setTask(taskRes.data);
+      if (taskRes.code === 0 && taskRes.data) {
+        setTask(taskRes.data);
+      }
       if (assetRes.code === 0 && assetRes.data) setAssets(assetRes.data.assets || []);
       if (csRes.code === 0 && csRes.data) setCreativeState(csRes.data);
     } catch (e: any) {
@@ -107,7 +121,7 @@ export default function AssetsPage() {
 
   // One-shot migration: ensure product images from creative_state exist in task_assets
   useEffect(() => {
-    if (migratedRef.current || !creativeState || assets.length === 0) return;
+    if (migratedRef.current || !creativeState) return;
     const csProductData = creativeState.product as { imageUrls?: string[] } | null | undefined;
     const csImageUrls = csProductData?.imageUrls || [];
     if (csImageUrls.length === 0) return;
@@ -144,19 +158,36 @@ export default function AssetsPage() {
   const csRequirements = creativeState?.userRequirements as { scriptText?: string; storyboardText?: string } | null | undefined;
 
   const prePopulatedAssets = assets.filter(
-    (a) => a.assetRole.startsWith("product_") || a.assetRole === "reference_video"
+    (a) => a.assetRole?.startsWith("product_") || a.assetRole === "reference_video"
   );
   const userAddedAssets = assets.filter(
-    (a) => !a.assetRole.startsWith("product_") && a.assetRole !== "reference_video"
+    (a) => !a.assetRole?.startsWith("product_") && a.assetRole !== "reference_video"
   );
-  const productImageCount = assets.filter((a) => a.assetRole.startsWith("product_")).length;
+  // Count product images. Include images with null/empty role (legacy DB records)
+  // as well as explicit product_* and reference_video roles.
+  const productImageCount = assets.filter((a) =>
+    a.assetKind === "image" && (
+      !a.assetRole ||
+      a.assetRole.startsWith("product_") ||
+      a.assetRole === "generated_result" ||
+      a.assetRole === "image_variant"
+    )
+  ).length;
+  const sourceImageAssets = assets.filter((a) => a.assetKind === "image" && a.url);
 
   const canUpload = task && ["asset_uploading", "waiting_asset_confirmation", "keyframe_configuring"].includes(task.status);
+  const canDelete = task && ["asset_uploading", "waiting_asset_confirmation"].includes(task.status);
+  const canStartAssetFlow = task?.status === "asset_uploading" || task?.status === "waiting_asset_confirmation";
   const canConfirm =
-    (task?.status === "asset_uploading" || task?.status === "waiting_asset_confirmation") &&
+    canStartAssetFlow &&
     productImageCount >= modeConfig.minProductImages;
   const isAnalyzing = task?.status === "asset_analyzing";
+  const assetAnalysis = task?.assetAnalysis as FashionAssetAnalysis | null | undefined;
   const isReadOnly = !!(task && !canUpload && !isAnalyzing);
+  const isWaitingForPlanGeneration = task?.status === "waiting_asset_confirmation";
+  const confirmButtonText = isWaitingForPlanGeneration
+    ? "确认分析结果，生成视频方案"
+    : modeConfig.confirmButtonText;
 
   // ── Handlers ──
   async function handleAddAsset() {
@@ -168,7 +199,12 @@ export default function AssetsPage() {
         `/api/video-tasks/${id}/assets`,
         {
           method: "POST",
-          body: { assetKind: uploadKind, assetRole: uploadRole, source: "user_upload", url: uploadUrl.trim() },
+          body: {
+            assetKind: uploadKind,
+            assetRole: uploadRole,
+            source: "user_upload",
+            url: uploadUrl.trim(),
+          },
         }
       );
       if (res.code === 0 && res.data) {
@@ -185,16 +221,80 @@ export default function AssetsPage() {
     }
   }
 
+  async function handleGenerateImage() {
+    if (!imagePrompt.trim()) return;
+    if (sourceImageAssets.length === 0) {
+      setError("请先添加至少一张原始商品图，再生成/编辑新图。");
+      return;
+    }
+    setGeneratingImage(true);
+    setError("");
+    try {
+      const res = await apiRequest<{ code: number; message: string; data: { taskId: string; assets: TaskAsset[] } }>(
+        `/api/video-tasks/${id}/assets/generate-image`,
+        {
+          method: "POST",
+          body: {
+            prompt: imagePrompt.trim(),
+            sourceAssetIds: sourceImageAssets.map((a) => a.assetId),
+            assetRole: "image_variant",
+          },
+        }
+      );
+      if (res.code === 0 && res.data) {
+        setAssets(res.data.assets || []);
+        setImagePrompt("");
+      } else {
+        setError(res.message || "生成新图失败");
+      }
+    } catch (e: any) {
+      setError(e.message || "生成新图失败");
+    } finally {
+      setGeneratingImage(false);
+    }
+  }
+
+  async function handleRegenerateImage(asset: TaskAsset, feedback: string) {
+    if (!feedback.trim()) return;
+    setError("");
+    try {
+      const res = await apiRequest<{ code: number; message: string; data: { taskId: string; assets: TaskAsset[] } }>(
+        `/api/video-tasks/${id}/assets/${asset.assetId}/regenerate-image`,
+        {
+          method: "POST",
+          body: { feedback: feedback.trim() },
+        }
+      );
+      if (res.code === 0 && res.data) {
+        setAssets(res.data.assets || []);
+      } else {
+        setError(res.message || "重新生成失败");
+      }
+    } catch (e: any) {
+      setError(e.message || "重新生成失败");
+    }
+  }
+
   async function handleUpdateRole(assetId: string, newRole: string) {
     try {
       await apiRequest(`/api/video-tasks/${id}/assets/${assetId}/role`, {
         method: "PATCH",
-        body: { assetRole: newRole },
+        body: { role: newRole },
       });
       setEditingId(null);
       load();
     } catch (e: any) {
       setError(e.message || "更新失败");
+    }
+  }
+
+  async function handleDelete(assetId: string) {
+    if (!confirm("确定要删除这个素材吗？")) return;
+    try {
+      await apiRequest<TaskAssetListResponse>(`/api/video-tasks/${id}/assets/${assetId}`, { method: "DELETE" });
+      load();
+    } catch (e: any) {
+      setError(e.message || "删除失败");
     }
   }
 
@@ -206,9 +306,24 @@ export default function AssetsPage() {
     setConfirming(true);
     setError("");
     try {
+      const latestGeneratedImage = [...assets]
+        .filter(isGeneratedImageAsset)
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
+      const confirmAssetIds = latestGeneratedImage
+        ? [
+            latestGeneratedImage.assetId,
+            ...assets
+              .filter((a) => a.assetRole === "reference_video")
+              .map((a) => a.assetId),
+          ]
+        : undefined;
+      const body: Record<string, unknown> = {};
+      if (confirmAssetIds) body.assetIds = confirmAssetIds;
+      if (creativePrompt.trim()) body.creativePrompt = creativePrompt.trim();
+
       const res = await apiRequest<{ code: number; message: string; data?: { status?: string } }>(
         `/api/video-tasks/${id}/assets/confirm`,
-        { method: "POST", body: {} }
+        { method: "POST", body }
       );
       if (res.code === 0) {
         const nextStatus = res.data?.status;
@@ -261,14 +376,15 @@ export default function AssetsPage() {
               <Upload className="h-4 w-4" />添加素材
             </button>
           )}
-          {canConfirm && (
+          {canStartAssetFlow && (
             <button
               onClick={handleConfirm}
-              disabled={confirming}
+              disabled={confirming || !canConfirm}
               className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              title={!canConfirm ? `请至少上传 ${modeConfig.minProductImages} 张用途为商品正面、商品背面或商品细节的图片` : undefined}
             >
               <CheckCircle2 className="h-4 w-4" />
-              {confirming ? "确认中..." : modeConfig.confirmButtonText}
+              {confirming ? "确认中..." : confirmButtonText}
             </button>
           )}
         </div>
@@ -358,6 +474,37 @@ export default function AssetsPage() {
         </div>
       )}
 
+      {canUpload && (
+        <div className="rounded-lg border bg-card p-6 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold">生成/编辑新商品图</h2>
+            <p className="text-sm text-muted-foreground">
+              先基于当前素材生成一张新图。生成结果会作为未确认素材加入下方列表，确认后才会进入 AI 素材分析。
+            </p>
+          </div>
+          <textarea
+            value={imagePrompt}
+            onChange={(e) => setImagePrompt(e.target.value)}
+            placeholder="例如：在原有黑色 T 恤背面加一个大面积蝴蝶图案，保持版型、主色和正面小图案不变。"
+            rows={3}
+            className="w-full rounded-md border px-3 py-2 text-sm placeholder:text-muted-foreground/50 resize-vertical"
+          />
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground">
+              将参考当前 {sourceImageAssets.length} 张图片素材生成新图。
+            </p>
+            <button
+              onClick={handleGenerateImage}
+              disabled={generatingImage || !imagePrompt.trim() || sourceImageAssets.length === 0}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {generatingImage && <Loader2 className="h-4 w-4 animate-spin" />}
+              {generatingImage ? "生成中..." : "生成/编辑新图"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Empty state */}
       {assets.length === 0 && !isAnalyzing && (
         <div className="rounded-lg border bg-card p-12 text-center">
@@ -380,9 +527,13 @@ export default function AssetsPage() {
                 key={asset.assetId}
                 asset={asset}
                 isReadOnly={isReadOnly}
+                canDelete={!!canDelete}
                 editingId={editingId}
                 onEditRole={setEditingId}
                 onUpdateRole={handleUpdateRole}
+                onDelete={handleDelete}
+                onPreview={setPreviewUrl}
+                onRegenerate={handleRegenerateImage}
               />
             ))}
           </div>
@@ -447,9 +598,13 @@ export default function AssetsPage() {
                   key={asset.assetId}
                   asset={asset}
                   isReadOnly={isReadOnly}
+                  canDelete={!!canDelete}
                   editingId={editingId}
                   onEditRole={setEditingId}
                   onUpdateRole={handleUpdateRole}
+                  onDelete={handleDelete}
+                  onPreview={setPreviewUrl}
+                  onRegenerate={handleRegenerateImage}
                 />
               ))}
             </div>
@@ -464,17 +619,67 @@ export default function AssetsPage() {
         </div>
       )}
 
-      {/* Product image requirement hint */}
-      {canUpload && !canConfirm && (
-        <div className="flex items-center gap-2 rounded-md border border-amber-500/50 bg-amber-50 p-4 text-sm text-amber-700">
-          请至少上传 {modeConfig.minProductImages} 张商品图片（商品正面/背面/细节），才能确认并开始 AI 分析。
+      {/* Creative direction input */}
+      {canStartAssetFlow && (
+        <div className="rounded-lg border bg-card p-6 space-y-3">
+          <div>
+            <h3 className="font-semibold">创意方向（选填）</h3>
+            <p className="text-sm text-muted-foreground">
+              看完素材后你有什么想法？AI 会在分析时优先考虑你的创意方向。例如：想突出的卖点、风格偏好、目标受众、需要避免的内容等。
+            </p>
+          </div>
+          <textarea
+            value={creativePrompt}
+            onChange={(e) => setCreativePrompt(e.target.value)}
+            placeholder="例如：我想突出背面的渐变印花和 oversized 版型，风格偏街头运动，目标 18-25 岁女生，别用咖啡厅场景…"
+            rows={3}
+            className="w-full rounded-md border px-3 py-2 text-sm placeholder:text-muted-foreground/50 resize-vertical"
+          />
         </div>
       )}
 
-      {/* AI analysis complete hint */}
+      {/* Product image requirement hint */}
+      {canUpload && !canConfirm && (
+        <div className="flex items-center gap-2 rounded-md border border-amber-500/50 bg-amber-50 p-4 text-sm text-amber-700">
+          请至少上传 {modeConfig.minProductImages} 张用途为「商品正面 / 商品背面 / 商品细节」的图片，才能确认并开始 AI 分析。
+        </div>
+      )}
+
+      {/* AI analysis results */}
       {task?.status === "waiting_asset_confirmation" && (
-        <div className="flex items-center gap-2 rounded-md border border-blue-500/50 bg-blue-50 p-4 text-sm text-blue-700">
-          AI 分析已完成。如需调整素材，请点击上方「添加素材」。确认无误后点击确认按钮。
+        <div className="rounded-lg border border-blue-500/50 bg-blue-50 p-6 space-y-3">
+          <div className="flex items-center gap-2 text-blue-700 font-semibold">
+            <CheckCircle2 className="h-5 w-5" />AI 分析完成
+          </div>
+          {assetAnalysis?.analysisText ? (
+            <>
+              <div className="whitespace-pre-wrap rounded-md border border-blue-200 bg-white/70 p-4 text-sm leading-7 text-slate-800">
+                {assetAnalysis.analysisText}
+              </div>
+              <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-blue-700/70">
+                <span>模型：{assetAnalysis.model}</span>
+                <span>已分析素材：{assetAnalysis.analyzedAssetIds.length} 个</span>
+                <span>分析时间：{new Date(assetAnalysis.analyzedAt).toLocaleString()}</span>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-blue-600">分析结果暂未返回，请稍后刷新。</p>
+          )}
+        </div>
+      )}
+
+      {/* Image preview modal */}
+      {previewUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 cursor-pointer"
+          onClick={() => setPreviewUrl(null)}
+        >
+          <img
+            src={previewUrl}
+            alt="预览"
+            className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
     </div>
@@ -485,16 +690,39 @@ export default function AssetsPage() {
 function AssetCard({
   asset,
   isReadOnly,
+  canDelete,
   editingId,
   onEditRole,
   onUpdateRole,
+  onDelete,
+  onPreview,
+  onRegenerate,
 }: {
   asset: TaskAsset;
   isReadOnly: boolean;
+  canDelete: boolean;
   editingId: string | null;
   onEditRole: (id: string | null) => void;
   onUpdateRole: (assetId: string, newRole: string) => void;
+  onDelete: (assetId: string) => void;
+  onPreview?: (url: string) => void;
+  onRegenerate?: (asset: TaskAsset, feedback: string) => Promise<void>;
 }) {
+  const [feedback, setFeedback] = useState("");
+  const [regenerating, setRegenerating] = useState(false);
+  const canRegenerate = !isReadOnly && isGeneratedImageAsset(asset) && !!onRegenerate;
+
+  async function submitRegeneration() {
+    if (!feedback.trim() || !onRegenerate) return;
+    setRegenerating(true);
+    try {
+      await onRegenerate(asset, feedback.trim());
+      setFeedback("");
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
   return (
     <div className={`rounded-lg border bg-card p-4 ${asset.confirmed ? "border-green-500/50" : ""}`}>
       <div className="flex items-start justify-between mb-3">
@@ -521,17 +749,48 @@ function AssetCard({
         <div className="flex items-center gap-2">
           {asset.confirmed && <CheckCircle2 className="h-4 w-4 text-green-500" />}
           {!isReadOnly && (
-            <button onClick={() => onEditRole(asset.assetId)}
-              className="text-muted-foreground hover:text-foreground">
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
+            <>
+              <button onClick={() => onEditRole(asset.assetId)}
+                className="text-muted-foreground hover:text-foreground">
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              {canDelete && (
+                <button onClick={() => onDelete(asset.assetId)}
+                  className="text-muted-foreground hover:text-destructive">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
-      <img src={asset.url} alt={asset.assetRole}
-        className="w-full h-32 object-cover rounded-md mb-2 bg-muted" />
+      <img
+        src={asset.url} alt={asset.assetRole}
+        className="w-full h-32 object-cover rounded-md mb-2 bg-muted cursor-pointer hover:opacity-90 transition-opacity"
+        onClick={() => onPreview?.(asset.url)}
+      />
       <p className="text-xs text-muted-foreground truncate">{asset.url}</p>
       {asset.fileName && <p className="text-xs text-muted-foreground">{asset.fileName}</p>}
+      {canRegenerate && (
+        <div className="mt-3 space-y-2 rounded-md border bg-muted/30 p-3">
+          <label className="text-xs font-medium">不满意？告诉 AI 这张图要怎么改</label>
+          <textarea
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            placeholder="例如：图案再小一点，放到胸前左侧；衣服版型和颜色不要变"
+            rows={2}
+            className="w-full rounded-md border bg-background px-2 py-1.5 text-xs"
+          />
+          <button
+            onClick={submitRegeneration}
+            disabled={regenerating || !feedback.trim()}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            {regenerating && <Loader2 className="h-3 w-3 animate-spin" />}
+            {regenerating ? "重新生成中..." : "按反馈重新生成"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -28,7 +28,10 @@ public class VideoTaskEntity {
     private Boolean needVoiceover;
     private UUID selectedPlanId;
 
-    @TableField(typeHandler = JsonbTypeHandler.class)
+    @TableField(value = "asset_analysis", typeHandler = JsonbTypeHandler.class)
+    private Map<String, Object> assetAnalysis;
+
+    @TableField(value = "render_manifest", typeHandler = JsonbTypeHandler.class)
     private Map<String, Object> renderManifest;
 
     private String manifestVersion;

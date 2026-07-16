@@ -129,4 +129,5 @@ public class VideoTaskController {
     ) {
         return ApiResponse.ok(videoTaskService.cancelTask(taskId, principal.getUserId()));
     }
+
 }

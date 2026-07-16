@@ -147,7 +147,7 @@ function TaskCard({ task }: { task: VideoTask }) {
       </div>
       {showSpinner && (
         <div className="mt-3">
-          <TaskProgress status={task.status} errorMessage={task.errorMessage} />
+          <TaskProgress status={task.status} errorMessage={task.errorMessage} taskMode={task.taskMode} />
         </div>
       )}
     </Link>

@@ -157,7 +157,7 @@ class VideoPlanItem(StrictModel):
 
     type: VideoTypeEnum
     title: str = Field(min_length=1)
-    hook: str = Field(min_length=1, max_length=120)
+    hook: str = Field(min_length=1, max_length=200)
     structure: str = Field(min_length=1)
     reason: str = Field(min_length=1)
     estimatedDuration: int = Field(ge=15, le=30)
@@ -193,8 +193,8 @@ class ShotItem(StrictModel):
 class StoryboardResult(StrictModel):
     """Storyboard result."""
 
-    title: str = Field(min_length=1, max_length=120)
-    hook: str = Field(min_length=1, max_length=120)
+    title: str = Field(min_length=1, max_length=200)
+    hook: str = Field(min_length=1, max_length=200)
     duration: int = Field(ge=15, le=30)
     caption: str = Field(min_length=1, max_length=500)
     hashtags: list[str] = Field(min_length=1, max_length=10)
@@ -254,26 +254,14 @@ class QualityCheckResult(StrictModel):
     suggestions: list[str] = Field(default_factory=list)
 
 
-class FashionVisualFeatures(StrictModel):
-    colors: list[str] = Field(default_factory=list)
-    patterns: list[str] = Field(default_factory=list)
-    materials: list[str] = Field(default_factory=list)
-    fit: Optional[str] = None
-    occasions: list[str] = Field(default_factory=list)
-
-
 class FashionAssetAnalysis(StrictModel):
-    """Fashion vertical asset analysis result."""
+    """Lightweight task-scoped asset analysis passed to downstream models."""
 
-    productCategory: str = Field(min_length=1)
-    styleAttributes: list[str] = Field(min_length=1)
-    visualFeatures: FashionVisualFeatures = Field(default_factory=FashionVisualFeatures)
-    recommendedAngles: list[str] = Field(min_length=1)
-    assetQualityScore: int = Field(ge=0, le=100)
-    missingAngles: list[str] = Field(default_factory=list)
-    lightingNotes: Optional[str] = None
-    backgroundRecommendations: list[str] = Field(default_factory=list)
-    modelRequirements: Optional[str] = None
+    schemaVersion: Literal["1.0"] = "1.0"
+    analysisText: str = Field(min_length=1)
+    analyzedAssetIds: list[str] = Field(default_factory=list)
+    model: str = Field(min_length=1)
+    analyzedAt: str = Field(min_length=1)
 
 
 class ReferenceShotItem(StrictModel):
@@ -452,7 +440,7 @@ class CallbackPayload(StrictModel):
     status: CallbackStatusEnum
     nextTaskStatus: Optional[NextTaskStatusEnum] = None
 
-    fashionAssetAnalysis: Optional[FashionAssetAnalysis] = None
+    fashionAssetAnalysis: Optional[FashionAssetAnalysis | dict] = None
     referenceAnalysis: Optional[ReferenceVideoAnalysis] = None
     productAnalysis: Optional[ProductAnalysis | dict] = None
     plans: Optional[list[VideoPlanItem] | list[dict]] = None

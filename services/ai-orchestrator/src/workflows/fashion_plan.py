@@ -22,8 +22,7 @@ class FashionPlanWorkflow:
     async def run(
         self,
         task_id: str,
-        product_context: dict,
-        asset_analysis: dict,
+        creative_context: dict,
     ) -> dict:
         retry = RetryPolicy(
             maximum_attempts=3,
@@ -36,7 +35,7 @@ class FashionPlanWorkflow:
         try:
             plans_result = await workflow.execute_activity(
                 "generate_fashion_plans",
-                args=[task_id, asset_analysis, product_context],
+                args=[task_id, creative_context],
                 start_to_close_timeout=timedelta(minutes=2),
                 retry_policy=retry,
             )

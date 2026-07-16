@@ -61,7 +61,7 @@ public final class VideoTaskStateMachine {
         TRANSITIONS.put("image_generating", Set.of("waiting_image_confirmation", "failed"));
         TRANSITIONS.put("waiting_image_confirmation", Set.of("image_generating", "video_clip_generating", "failed"));
         TRANSITIONS.put("video_clip_generating", Set.of("waiting_video_clip_confirmation", "failed"));
-        TRANSITIONS.put("waiting_video_clip_confirmation", Set.of("rendering", "failed"));
+        TRANSITIONS.put("waiting_video_clip_confirmation", Set.of("video_clip_generating", "rendering", "failed"));
         TRANSITIONS.put("waiting_final_review", Set.of("completed", "repairing", "failed"));
         TRANSITIONS.put("repairing", Set.of("keyframe_configuring", "image_generating", "video_clip_generating", "rendering", "failed"));
         TRANSITIONS.put("cancelled", Set.of());
@@ -81,7 +81,7 @@ public final class VideoTaskStateMachine {
         // V1 Core retry targets
         RETRY_TARGETS.put("product_analysis", "analyzing");
         RETRY_TARGETS.put("video_plan", "analyzing");
-        RETRY_TARGETS.put("storyboard", "script_generating");
+        RETRY_TARGETS.put("storyboard", "storyboard_generating");
         RETRY_TARGETS.put("material", "material_generating");
         RETRY_TARGETS.put("quality_check", "material_generating");
         RETRY_TARGETS.put("render_manifest", "rendering");

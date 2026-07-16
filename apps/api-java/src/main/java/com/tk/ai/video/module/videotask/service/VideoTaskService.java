@@ -10,6 +10,7 @@ import java.util.UUID;
 
 public interface VideoTaskService {
     CreateVideoTaskResponse create(CreateVideoTaskRequest request, UUID userId);
+    FashionTaskCreateResponse createFashionTask(CreateFashionTaskRequest request, UUID userId);
     VideoTaskResponse getById(UUID taskId, UUID userId);
     PageResult<VideoTaskResponse> list(String status, UUID productId, int page, int pageSize, UUID userId);
     VideoTaskStatusResponse selectPlan(UUID taskId, SelectPlanRequest request, UUID userId);

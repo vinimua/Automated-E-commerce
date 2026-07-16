@@ -18,10 +18,10 @@ class TestBuildCallbackPayload:
         payload = build_callback_payload(
             self.TASK_ID, "asset_analysis", "success", "waiting_asset_confirmation",
             fashionAssetAnalysis={
-                "productCategory": "Dresses",
-                "styleAttributes": ["Casual"],
-                "recommendedAngles": ["Front"],
-                "assetQualityScore": 80,
+                "analysisText": "Dress shown from the front",
+                "analyzedAssetIds": ["a1"],
+                "model": "vision-model",
+                "analyzedAt": "2026-07-11T12:00:00Z",
             },
         )
         cb = CallbackPayload.model_validate(payload)

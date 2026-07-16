@@ -2,36 +2,32 @@
 
 import { apiRequest } from "@/lib/api-client";
 import { V1_DURATIONS } from "@/types/api";
-import type { CreateProductData, CreateVideoTaskData, TaskMode } from "@/types/api";
+import type { CreateFashionTaskRequest, FashionTaskCreateResponse, TaskMode } from "@/types/api";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 type Step = "mode" | "details";
 
-const TASK_MODES: Array<{ value: TaskMode; title: string; desc: string; primaryInput: string }> = [
+const TASK_MODES: Array<{ value: TaskMode; title: string; desc: string }> = [
   {
     value: "PRODUCT_CREATIVE",
     title: "AI 根据商品生成创意",
     desc: "从商品图和卖点出发，生成差异化创意方案。",
-    primaryInput: "商品图片",
   },
   {
     value: "REFERENCE_STORYBOARD",
     title: "按参考视频分镜生成",
     desc: "先上传参考视频，AI 拆解分镜，再替换成你的商品内容。",
-    primaryInput: "参考视频",
   },
   {
     value: "USER_SCRIPT",
     title: "我有脚本",
     desc: "用户提供脚本，AI 拆解分镜、关键帧和视频片段。",
-    primaryInput: "脚本",
   },
   {
     value: "CUSTOM_STORYBOARD",
     title: "我有分镜",
     desc: "用户提供分镜结构，AI 补齐画面与片段生成。",
-    primaryInput: "分镜",
   },
 ];
 
@@ -40,7 +36,7 @@ export default function NewProductPage() {
   const [step, setStep] = useState<Step>("mode");
 
   const [taskMode, setTaskMode] = useState<TaskMode>("PRODUCT_CREATIVE");
-  const [duration, setDuration] = useState<number>(20);
+  const [duration, setDuration] = useState<CreateFashionTaskRequest["duration"]>(20);
   const [needSubtitles, setNeedSubtitles] = useState(true);
 
   const [name, setName] = useState("");
@@ -49,35 +45,17 @@ export default function NewProductPage() {
   const [targetMarket, setTargetMarket] = useState("US");
   const [language, setLanguage] = useState("en");
 
-  const [imageUrl, setImageUrl] = useState("");
-  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [referenceVideoUrl, setReferenceVideoUrl] = useState("");
   const [scriptText, setScriptText] = useState("");
   const [storyboardText, setStoryboardText] = useState("");
+  const [creativePrompt, setCreativePrompt] = useState("");
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const selectedMode = TASK_MODES.find((m) => m.value === taskMode) ?? TASK_MODES[0];
-
-  function addImage() {
-    const url = imageUrl.trim();
-    if (!url) return;
-    if (!url.startsWith("http")) {
-      setError("请输入有效的图片 URL");
-      return;
-    }
-    setImageUrls([...imageUrls, url]);
-    setImageUrl("");
-    setError("");
-  }
-
   function validateDetails() {
     if (!name.trim()) {
       return "请输入商品名称";
-    }
-    if (taskMode === "PRODUCT_CREATIVE" && imageUrls.length === 0) {
-      return "商品创意模式需要至少一张商品图片";
     }
     if (taskMode === "REFERENCE_STORYBOARD" && !referenceVideoUrl.trim().startsWith("http")) {
       return "请先填写有效的参考视频 URL";
@@ -91,75 +69,6 @@ export default function NewProductPage() {
     return "";
   }
 
-  async function saveInitialContext(taskId: string) {
-    const userRequirements: Record<string, unknown> = {
-      taskMode,
-      duration,
-      needSubtitles,
-      description: description.trim(),
-    };
-
-    if (taskMode === "REFERENCE_STORYBOARD") {
-      userRequirements.referenceVideoUrl = referenceVideoUrl.trim();
-      await apiRequest(`/api/video-tasks/${taskId}/assets`, {
-        method: "POST",
-        body: {
-          assetKind: "video",
-          assetRole: "reference_video",
-          source: "user_upload",
-          url: referenceVideoUrl.trim(),
-          description: "Initial reference video uploaded during task creation",
-        },
-      });
-    }
-
-    // Write product images to task_assets for all modes
-    if (imageUrls.length > 0) {
-      for (const url of imageUrls) {
-        await apiRequest(`/api/video-tasks/${taskId}/assets`, {
-          method: "POST",
-          body: {
-            assetKind: "image",
-            assetRole: "product_front",
-            source: "user_upload",
-            url,
-            description: "Product image uploaded during task creation",
-          },
-        });
-      }
-    }
-
-    if (taskMode === "USER_SCRIPT") {
-      userRequirements.scriptText = scriptText.trim();
-    }
-
-    if (taskMode === "CUSTOM_STORYBOARD") {
-      userRequirements.storyboardText = storyboardText.trim();
-    }
-
-    await apiRequest(`/api/video-tasks/${taskId}/creative-state`, {
-      method: "PATCH",
-      body: {
-        product: {
-          name: name.trim(),
-          description: description.trim(),
-          productLink: productLink.trim(),
-          imageUrls,
-          targetMarket,
-          language,
-        },
-        referenceVideo:
-          taskMode === "REFERENCE_STORYBOARD"
-            ? {
-                url: referenceVideoUrl.trim(),
-                source: "user_upload",
-              }
-            : undefined,
-        userRequirements,
-      },
-    });
-  }
-
   async function createTask(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -171,45 +80,36 @@ export default function NewProductPage() {
 
     setLoading(true);
     try {
-      const productRes = await apiRequest<{ code: number; message: string; data: CreateProductData }>("/api/products", {
+      const body: CreateFashionTaskRequest = {
+        name: name.trim(),
+        description,
+        productLink,
+        targetMarket: targetMarket as CreateFashionTaskRequest["targetMarket"],
+        language: language as CreateFashionTaskRequest["language"],
+        duration,
+        needSubtitles,
+        taskMode,
+        referenceVideoUrl: taskMode === "REFERENCE_STORYBOARD" ? referenceVideoUrl.trim() : undefined,
+        scriptText: taskMode === "USER_SCRIPT" ? scriptText.trim() : undefined,
+        storyboardText: taskMode === "CUSTOM_STORYBOARD" ? storyboardText.trim() : undefined,
+        creativePrompt: creativePrompt.trim() || undefined,
+      };
+
+      const res = await apiRequest<FashionTaskCreateResponse>("/api/fashion-video-tasks", {
         method: "POST",
-        body: {
-          name: name.trim(),
-          description,
-          productLink,
-          imageUrls,
-          targetMarket,
-          language,
-        },
+        body,
       });
 
-      if (productRes.code !== 0) {
-        setError(productRes.message || "创建商品失败");
+      if (res.code !== 0 || !res.data?.taskId) {
+        setError(res.message || "创建任务失败");
         return;
       }
 
-      const taskRes = await apiRequest<{ code: number; message: string; data: CreateVideoTaskData }>("/api/video-tasks", {
-        method: "POST",
-        body: {
-          productId: productRes.data.productId,
-          duration,
-          needSubtitles,
-          taskMode,
-        },
-      });
-
-      if (taskRes.code !== 0) {
-        setError(taskRes.message || "创建任务失败");
-        return;
-      }
-
-      await saveInitialContext(taskRes.data.taskId);
-
-      const status = taskRes.data.status;
+      const status = res.data.status;
       if (status === "asset_uploading" || status === "asset_analyzing" || status === "waiting_asset_confirmation") {
-        router.push(`/video-tasks/${taskRes.data.taskId}/assets`);
+        router.push(`/video-tasks/${res.data.taskId}/assets`);
       } else {
-        router.push(`/video-tasks/${taskRes.data.taskId}/plans`);
+        router.push(`/video-tasks/${res.data.taskId}/plans`);
       }
     } catch (e: any) {
       setError(e.message || "网络错误");
@@ -337,6 +237,18 @@ export default function NewProductPage() {
             />
           </div>
 
+          <div>
+            <label className="text-sm font-medium">创作要求</label>
+            <textarea
+              value={creativePrompt}
+              onChange={(e) => setCreativePrompt(e.target.value)}
+              rows={4}
+              className="mt-1 w-full rounded-md border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              placeholder="例如：做一个 20 秒海滩度假风视频，突出裙摆飘动，不要改变商品花纹。"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">这段原文会直接提供给后续方案和分镜 AI。</p>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium">目标市场</label>
@@ -373,47 +285,6 @@ export default function NewProductPage() {
               className="mt-1 w-full rounded-md border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
               placeholder="https://..."
             />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">
-              商品图片 {taskMode === "PRODUCT_CREATIVE" ? "*" : "（可选）"}
-            </label>
-            <div className="mt-1 flex gap-2">
-              <input
-                type="url"
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                className="flex-1 rounded-md border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                placeholder="输入图片 URL"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addImage();
-                  }
-                }}
-              />
-              <button type="button" onClick={addImage} className="rounded-md border px-3 py-2 text-sm hover:bg-accent">
-                添加
-              </button>
-            </div>
-            {imageUrls.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {imageUrls.map((url, i) => (
-                  <div key={url} className="group relative">
-                    <img src={url} alt={`Product image ${i + 1}`} className="h-20 w-20 rounded-md border object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => setImageUrls(imageUrls.filter((_, j) => j !== i))}
-                      className="absolute -right-1 -top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-destructive text-xs text-white group-hover:flex"
-                    >
-                      x
-                    </button>
-                    {i === 0 && <span className="absolute bottom-0 left-0 rounded-tr bg-primary px-1 text-[10px] text-primary-foreground">主图</span>}
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           <div>

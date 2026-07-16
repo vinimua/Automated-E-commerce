@@ -93,8 +93,20 @@ export default function VideoTaskPlansPage() {
   }
 
   const isWaiting = task.status === "waiting_plan_selection";
-  const isInProgress = ["analyzing", "analysis_completed", "plan_generated"].includes(task.status);
-  const isPostSelection = ["storyboard_generating", "script_generating", "script_generated", "material_generating", "material_generated", "rendering", "checking"].includes(task.status);
+  const isInProgress = ["plan_generating", "analyzing", "analysis_completed", "plan_generated"].includes(task.status);
+  const isPostSelection = [
+    "storyboard_generating",
+    "waiting_storyboard_confirmation",
+    "keyframe_configuring",
+    "image_generating",
+    "waiting_image_confirmation",
+    "script_generating",
+    "script_generated",
+    "material_generating",
+    "material_generated",
+    "rendering",
+    "checking",
+  ].includes(task.status);
   const isCompleted = task.status === "completed" || task.status === "exported";
 
   return (
@@ -103,7 +115,7 @@ export default function VideoTaskPlansPage() {
       <div>
         <Link href="/dashboard" className="text-sm text-muted-foreground hover:text-foreground">← 返回工作台</Link>
         <h1 className="mt-2 text-2xl font-bold">
-          {TASK_MODE_LABELS[task.taskMode] || "创作任务"}
+          {task.selectedPlanTitle || TASK_MODE_LABELS[task.taskMode] || "创作任务"}
           <span className="ml-2 text-base font-normal text-muted-foreground">{task.duration}s</span>
         </h1>
         {task.videoType && (
@@ -126,7 +138,7 @@ export default function VideoTaskPlansPage() {
       </div>
 
       {/* Progress */}
-      <TaskProgress status={task.status} errorMessage={task.errorMessage} />
+      <TaskProgress status={task.status} errorMessage={task.errorMessage} taskMode={task.taskMode} />
 
       {/* AI is working */}
       {isInProgress && (
@@ -186,12 +198,12 @@ export default function VideoTaskPlansPage() {
         </div>
       )}
 
-      {/* Post-selection — AI working on script/storyboard/materials */}
+      {/* Post-selection — AI working on storyboard */}
       {isPostSelection && (
         <div className="rounded-lg border bg-card p-12 text-center">
           <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="mt-4 font-medium">AI 正在生成脚本、分镜和素材...</p>
-          <p className="mt-1 text-sm text-muted-foreground">根据视频时长，预计需要 1-3 分钟</p>
+          <p className="mt-4 font-medium">AI 正在生成分镜脚本...</p>
+          <p className="mt-1 text-sm text-muted-foreground">预计需要 30-60 秒，完成后会自动跳转</p>
         </div>
       )}
 

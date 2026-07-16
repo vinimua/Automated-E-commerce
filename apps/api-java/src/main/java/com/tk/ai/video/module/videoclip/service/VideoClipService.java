@@ -10,6 +10,10 @@ public interface VideoClipService {
 
     List<VideoClipResponse> getClips(UUID taskId, UUID userId);
 
+    VideoTaskStatusResponse generateClips(UUID taskId, UUID userId);
+
+    VideoTaskStatusResponse regenerateClip(UUID taskId, UUID clipId, UUID userId);
+
     VideoTaskStatusResponse confirmClip(UUID taskId, UUID clipId, ConfirmVideoClipRequest request, UUID userId);
 
     VideoTaskStatusResponse rejectClip(UUID taskId, UUID clipId, ConfirmVideoClipRequest request, UUID userId);

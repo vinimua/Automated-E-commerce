@@ -227,6 +227,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/VideoTaskListResponse"
 
+  /api/fashion-video-tasks:
+    post:
+      tags: [VideoTasks]
+      summary: "Create fashion creative task (aggregate: product + task + assets + creative state)"
+      description: |
+        Single atomic call that creates product, video task, initial assets, and creative state
+        in one transaction. Preferred over the multi-call flow for Fashion Creative Loop V1.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFashionTaskRequest"
+      responses:
+        "200":
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FashionTaskCreateResponse"
+
   /api/video-tasks/{taskId}:
     get:
       tags: [VideoTasks]
@@ -366,6 +387,75 @@ paths:
       responses:
         "200":
           description: Role updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskAssetListResponse"
+
+  /api/video-tasks/{taskId}/assets/{assetId}:
+    delete:
+      tags: [VideoTasks]
+      summary: Delete task asset
+      description: Delete an uploaded task asset while the task is still in asset upload or asset confirmation stage.
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - name: assetId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Asset deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskAssetListResponse"
+
+  /api/video-tasks/{taskId}/assets/generate-image:
+    post:
+      tags: [VideoTasks]
+      summary: Generate or edit a task-level product image
+      description: Generate one AI image candidate from existing task assets and user instruction. The generated image is saved as an unconfirmed task asset with source=ai_generated.
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateAssetImageRequest"
+      responses:
+        "200":
+          description: Generated asset saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskAssetListResponse"
+
+  /api/video-tasks/{taskId}/assets/{assetId}/regenerate-image:
+    post:
+      tags: [VideoTasks]
+      summary: Regenerate an AI-generated task image with user feedback
+      description: Create a new unconfirmed AI image candidate from a previous generated asset, preserving regeneration context in task asset metadata.
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - name: assetId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegenerateAssetImageRequest"
+      responses:
+        "200":
+          description: Regenerated asset saved
           content:
             application/json:
               schema:
@@ -1216,7 +1306,7 @@ components:
           type: string
         imageUrls:
           type: array
-          description: Optional for non-product-first Fashion Creative Loop modes. Product creative mode should still provide at least one product image.
+          description: Optional initial product images. Fashion Creative Loop tasks can be created without images; required product images are collected and confirmed on the task assets page.
           items:
             type: string
             format: uri
@@ -1371,6 +1461,79 @@ components:
           type: integer
           nullable: true
 
+    CreateFashionTaskRequest:
+      type: object
+      required: [name, targetMarket, language, duration]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        productLink:
+          type: string
+        imageUrls:
+          type: array
+          description: Optional initial product images. Fashion Creative Loop tasks can be created without images; required product images are collected and confirmed on the task assets page.
+          items:
+            type: string
+            format: uri
+        targetMarket:
+          type: string
+          enum: [US, UK, JP]
+        language:
+          type: string
+          enum: [en, zh, ja]
+        duration:
+          type: integer
+          enum: [15, 20, 25, 30]
+        videoType:
+          $ref: "#/components/schemas/VideoType"
+        needSubtitles:
+          type: boolean
+          default: true
+        taskMode:
+          $ref: "#/components/schemas/TaskMode"
+        productCategory:
+          type: string
+          nullable: true
+        shotCount:
+          type: integer
+          nullable: true
+        referenceVideoUrl:
+          type: string
+          description: Required when taskMode is REFERENCE_STORYBOARD
+        scriptText:
+          type: string
+          description: Required when taskMode is USER_SCRIPT
+        storyboardText:
+          type: string
+          description: Required when taskMode is CUSTOM_STORYBOARD
+        creativePrompt:
+          type: string
+          description: Free-form creative direction preserved verbatim and passed to downstream AI stages.
+
+    FashionTaskCreateResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            taskId:
+              type: string
+              format: uuid
+            productId:
+              type: string
+              format: uuid
+            status:
+              $ref: "#/components/schemas/VideoTaskStatus"
+            progress:
+              type: integer
+
     CreateVideoTaskResponse:
       type: object
       properties:
@@ -1414,6 +1577,13 @@ components:
           type: string
           format: uuid
           nullable: true
+        selectedPlanTitle:
+          type: string
+          nullable: true
+        assetAnalysis:
+          allOf:
+            - $ref: "#/components/schemas/FashionAssetAnalysis"
+          nullable: true
         taskMode:
           $ref: "#/components/schemas/TaskMode"
         productCategory:
@@ -1444,6 +1614,25 @@ components:
           example: 1.0.0
         retryCount:
           type: integer
+
+    FashionAssetAnalysis:
+      type: object
+      required: [schemaVersion, analysisText, analyzedAssetIds, model, analyzedAt]
+      properties:
+        schemaVersion:
+          type: string
+          enum: ["1.0"]
+        analysisText:
+          type: string
+        analyzedAssetIds:
+          type: array
+          items:
+            type: string
+        model:
+          type: string
+        analyzedAt:
+          type: string
+          format: date-time
 
     VideoTaskDetailResponse:
       type: object
@@ -2434,6 +2623,12 @@ components:
           type: string
         category:
           type: string
+        targetType:
+          type: string
+          enum: [storyboard, keyframe, video_clip, render_manifest, final_video, plan]
+        targetId:
+          type: string
+          nullable: true
 
     QaResult:
       type: object
@@ -2606,6 +2801,31 @@ components:
           items:
             type: string
             format: uuid
+
+    GenerateAssetImageRequest:
+      type: object
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+          minLength: 1
+        sourceAssetIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        assetRole:
+          type: string
+          enum: [generated_result, image_variant]
+          default: image_variant
+
+    RegenerateAssetImageRequest:
+      type: object
+      required: [feedback]
+      properties:
+        feedback:
+          type: string
+          minLength: 1
 
     ConfirmPlanRequest:
       type: object

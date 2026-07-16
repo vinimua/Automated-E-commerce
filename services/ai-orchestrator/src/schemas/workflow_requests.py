@@ -62,8 +62,7 @@ class CreativePlanRequest(BaseModel):
     productId: UUID
     userId: UUID
     correlationId: str
-    productContext: dict = Field(default_factory=dict)
-    assetAnalysis: Optional[dict] = None
+    creativeContext: dict = Field(default_factory=dict)
 
 
 class StoryboardGenerationRequest(BaseModel):
@@ -73,7 +72,7 @@ class StoryboardGenerationRequest(BaseModel):
     productId: UUID
     userId: UUID
     correlationId: str
-    productContext: dict = Field(default_factory=dict)
+    creativeContext: dict = Field(default_factory=dict)
     selectedPlan: dict
     duration: int = Field(ge=15, le=30)
     videoType: str
@@ -107,10 +106,36 @@ class RepairRequest(BaseModel):
     productId: UUID
     userId: UUID
     correlationId: str
+    repairEventId: UUID | None = None
     feedbackText: str = Field(min_length=1)
     category: str = Field(min_length=1)
     targetType: str = Field(min_length=1)
     currentState: dict = Field(default_factory=dict)
+
+
+class AssetImageGenerationRequest(BaseModel):
+    """Synchronous request from Java to generate or edit a task-level product image."""
+
+    taskId: UUID
+    productId: UUID
+    userId: UUID
+    correlationId: str
+    prompt: str = Field(min_length=1)
+    productContext: dict = Field(default_factory=dict)
+    sourceAssets: list[dict] = Field(default_factory=list)
+    assetRole: str = "image_variant"
+    feedback: str | None = None
+    previousPrompt: str | None = None
+    previousResult: dict | None = None
+
+
+class AssetImageGenerationResponse(BaseModel):
+    url: str
+    provider: str
+    model: str
+    prompt: str
+    negativePrompt: str = ""
+    qualityScore: Optional[int] = None
 
 
 class WorkflowTriggerResponse(BaseModel):

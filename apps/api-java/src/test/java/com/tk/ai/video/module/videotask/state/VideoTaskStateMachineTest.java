@@ -108,7 +108,7 @@ class VideoTaskStateMachineTest {
             Arguments.of("asset_analysis",     "asset_analyzing"),
             Arguments.of("reference_analysis", "reference_analyzing"),
             Arguments.of("creative_plan",      "plan_generating"),
-            Arguments.of("storyboard",         "script_generating"),
+            Arguments.of("storyboard",         "storyboard_generating"),
             Arguments.of("keyframe",           "image_generating"),
             Arguments.of("video_clip",         "video_clip_generating"),
             Arguments.of("material",           "material_generating"),

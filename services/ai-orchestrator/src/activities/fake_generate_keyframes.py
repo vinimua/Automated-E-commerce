@@ -1,12 +1,11 @@
-"""Activity: Generate keyframe images using the configured ImageGenerationProvider.
+"""Activity: Generate keyframe images using FakeImageProvider (development phase).
 
-The active provider is selected by get_image_provider():
-- ENABLE_IMAGE_GENERATION=false → FakeImageProvider (placeholder URLs)
-- ENABLE_IMAGE_GENERATION=true → OpenAIImageProvider (DALL-E or compatible)
+M4 uses FakeImageProvider exclusively — real image generation for keyframes
+will be enabled in a later milestone via ENABLE_IMAGE_GENERATION.
 """
 
 from temporalio import activity
-from src.providers import get_image_provider
+from src.providers.fake_image import FakeImageProvider
 from src.schemas.ai_outputs import KeyframeGenerationResult
 
 
@@ -14,12 +13,12 @@ from src.schemas.ai_outputs import KeyframeGenerationResult
 async def fake_generate_keyframes(task_id: str, prompts: dict, storyboard: dict) -> dict:
     """Generate keyframe images for each shot.
 
-    Uses the configured ImageGenerationProvider. Individual per-shot failures
+    Always uses FakeImageProvider in M4. Individual per-shot failures
     are captured as failed keyframe entries rather than aborting the entire batch.
 
     Returns a KeyframeGenerationResult-compatible dict with 'keyframes' array.
     """
-    provider = get_image_provider()
+    provider = FakeImageProvider()
     prompts_list = prompts.get("prompts", [])
     keyframes = []
 

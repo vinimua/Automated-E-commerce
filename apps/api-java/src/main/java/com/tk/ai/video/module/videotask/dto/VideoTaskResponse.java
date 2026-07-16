@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.time.OffsetDateTime;
+import java.util.Map;
 import java.util.UUID;
 
 @Data
@@ -18,6 +19,8 @@ public class VideoTaskResponse {
     private Boolean needSubtitles;
     private Boolean needVoiceover;
     private UUID selectedPlanId;
+    private String selectedPlanTitle;
+    private Map<String, Object> assetAnalysis;
     private String failedStage;
     private String errorCode;
     private String errorMessage;

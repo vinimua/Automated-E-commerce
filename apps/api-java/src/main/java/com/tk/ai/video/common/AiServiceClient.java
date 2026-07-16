@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
 import java.net.http.HttpClient;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -132,16 +133,55 @@ public class AiServiceClient {
     // ── Fashion Creative Loop V1 dispatch methods ──
 
     public void startAssetAnalysis(UUID taskId, UUID productId, UUID userId,
-                                   Map<String, Object> assetContext) {
+                                   Map<String, Object> productContext,
+                                   List<Map<String, Object>> assets) {
         String correlationId = getOrCreateCorrelationId();
-        Map<String, Object> payload = Map.of(
-                "taskId", taskId.toString(),
-                "productId", productId.toString(),
-                "userId", userId.toString(),
-                "correlationId", correlationId,
-                "assetContext", assetContext != null ? assetContext : Map.of()
-        );
+        java.util.LinkedHashMap<String, Object> payload = new java.util.LinkedHashMap<>();
+        payload.put("taskId", taskId.toString());
+        payload.put("productId", productId.toString());
+        payload.put("userId", userId.toString());
+        payload.put("correlationId", correlationId);
+        payload.put("productContext", productContext != null ? productContext : java.util.Map.of());
+        payload.put("assets", assets != null ? assets : java.util.List.of());
         fireAndForget("/ai/workflows/asset-analysis", payload, taskId, "AssetAnalysis");
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> generateAssetImage(UUID taskId, UUID productId, UUID userId,
+                                                  String prompt,
+                                                  Map<String, Object> productContext,
+                                                  List<Map<String, Object>> sourceAssets,
+                                                  String assetRole) {
+        return generateAssetImage(taskId, productId, userId, prompt, productContext, sourceAssets, assetRole, Map.of());
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> generateAssetImage(UUID taskId, UUID productId, UUID userId,
+                                                  String prompt,
+                                                  Map<String, Object> productContext,
+                                                  List<Map<String, Object>> sourceAssets,
+                                                  String assetRole,
+                                                  Map<String, Object> generationContext) {
+        String correlationId = getOrCreateCorrelationId();
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("taskId", taskId.toString());
+        payload.put("productId", productId.toString());
+        payload.put("userId", userId.toString());
+        payload.put("correlationId", correlationId);
+        payload.put("prompt", prompt);
+        payload.put("productContext", productContext != null ? productContext : Map.of());
+        payload.put("sourceAssets", sourceAssets != null ? sourceAssets : List.of());
+        payload.put("assetRole", assetRole != null ? assetRole : "image_variant");
+        if (generationContext != null) {
+            payload.putAll(generationContext);
+        }
+
+        Map<String, Object> response = restClient.post()
+                .uri(baseUrl + "/ai/assets/generate-image")
+                .body(payload)
+                .retrieve()
+                .body(Map.class);
+        return response != null ? response : Map.of();
     }
 
     public void startReferenceAnalysis(UUID taskId, UUID productId, UUID userId,
@@ -158,21 +198,22 @@ public class AiServiceClient {
     }
 
     public void startCreativePlanGeneration(UUID taskId, UUID productId, UUID userId,
-                                              Map<String, Object> creativeState) {
+                                              Map<String, Object> creativeContext) {
         String correlationId = getOrCreateCorrelationId();
         Map<String, Object> payload = Map.of(
                 "taskId", taskId.toString(),
                 "productId", productId.toString(),
                 "userId", userId.toString(),
                 "correlationId", correlationId,
-                "creativeState", creativeState != null ? creativeState : Map.of()
+                "creativeContext", creativeContext != null ? creativeContext : Map.of()
         );
         fireAndForget("/ai/workflows/creative-plan-generation", payload, taskId, "CreativePlanGeneration");
     }
 
     public void startStoryboardGeneration(UUID taskId, UUID productId, UUID userId,
                                            UUID selectedPlanId, Map<String, Object> selectedPlan,
-                                           int duration, String videoType) {
+                                           int duration, String videoType,
+                                           Map<String, Object> creativeContext) {
         String correlationId = getOrCreateCorrelationId();
         Map<String, Object> payload = Map.of(
                 "taskId", taskId.toString(),
@@ -182,7 +223,8 @@ public class AiServiceClient {
                 "selectedPlanId", selectedPlanId.toString(),
                 "selectedPlan", selectedPlan != null ? selectedPlan : Map.of(),
                 "duration", duration,
-                "videoType", videoType
+                "videoType", videoType,
+                "creativeContext", creativeContext != null ? creativeContext : Map.of()
         );
         fireAndForget("/ai/workflows/storyboard-generation", payload, taskId, "StoryboardGeneration");
     }

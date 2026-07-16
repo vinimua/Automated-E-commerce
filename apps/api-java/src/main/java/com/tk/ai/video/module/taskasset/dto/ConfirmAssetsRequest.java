@@ -8,4 +8,6 @@ import java.util.UUID;
 @Data
 public class ConfirmAssetsRequest {
     private List<UUID> assetIds;
+    /** User's creative direction — optional. Injected into AI analysis as rawPrompt. */
+    private String creativePrompt;
 }

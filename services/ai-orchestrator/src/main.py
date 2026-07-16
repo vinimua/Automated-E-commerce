@@ -16,6 +16,7 @@ from temporalio.worker import Worker
 
 from src.api.health import router as health_router
 from src.api.workflows import router as workflows_router
+from src.api.asset_images import router as asset_images_router
 from src.config import settings
 from src.activities import ALL_ACTIVITIES
 from src.workflows import ALL_WORKFLOWS
@@ -89,6 +90,7 @@ app.add_middleware(
 # Routers
 app.include_router(health_router)
 app.include_router(workflows_router, prefix="/ai")
+app.include_router(asset_images_router, prefix="/ai")
 
 
 @app.exception_handler(Exception)

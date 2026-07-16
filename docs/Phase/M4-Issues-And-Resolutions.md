@@ -1,184 +1,455 @@
-# M4 问题与解决方案统计文档
+# M4 问题与解决方案整理
 
-> 阶段：M4 Python fake provider 工作流  
-> 来源：对 `docs/Phase/M4-Results-And-Acceptance.md` 的复验，以及对 Java 主后端、Python AI Orchestrator、AI 输出契约的交叉检查。  
-> 结论：M4 的 Python fake provider、Pydantic Schema、Activity 级测试是可用的；本次主要修复的是 Java 主链路与 Python M4 workflow 之间的触发接线、状态流转和 callback 契约不一致问题。
-
----
-
-## 1. 总体结论
-
-M4 原始验收文档把阶段结论写为“已通过”。复验后发现，Python 侧 workflow 和 fake provider 的确已经具备基础能力，但存在 4 个会影响真实主链路的问题：
-
-1. 关键帧全部确认后，Java 没有触发 Python 视频片段生成 workflow。
-2. 用户提交修复反馈后，Java 没有触发 Python repair workflow。
-3. repair 成功回调会落到 `repairing -> repairing` 这种非法自跳，导致状态无法继续推进。
-4. `reference_analysis` 的 Python 回调状态与 Java 状态机不一致。
-
-这些问题已完成修复。修复后 M4 可以调整为：
-
-```text
-修复后通过：Python fake provider 工作流可用，Java 主链路已能触发 video_clip / repair workflow；
-真实 Temporal Server 端到端运行仍保留到 M11 验证。
-```
+阶段：M4 关键帧页与 fake 生图切片  
+日期：2026-07-16  
+范围：`/keyframes` 页面、Java keyframe 主链路、Python fake keyframe provider、M4 验收文档  
+结论：本轮已修复 M4 关键数据完整性问题，仍需跑真实任务做端到端验收。
 
 ---
 
-## 2. 问题与解决方案
+## 1. 背景
 
-| 编号 | 问题 | 严重级别 | 问题原因 | 解决方案 |
-|---|---|---|---|---|
-| M4-001 | 关键帧全部确认后没有触发视频片段生成 | 高 | `KeyframeServiceImpl` 只把任务状态推进到 `video_clip_generating`，但没有调用 `AiServiceClient.startVideoClipGeneration()` | 在所有关键帧确认后调用 `startVideoClipGeneration()`，并把已确认关键帧整理成 Python 需要的 `keyframes` payload |
-| M4-002 | `startVideoClipGeneration()` 请求体与 Python Schema 不一致 | 高 | Java 原来发送 `params`，但 Python `VideoClipGenerationRequest` 要求 `storyboard` 和 `keyframes` | 修改 Java client 方法签名和请求体，改为发送 `storyboard`、`keyframes` |
-| M4-003 | 用户提交反馈后没有触发 repair workflow | 高 | `VideoTaskServiceImpl.submitFeedback()` 只创建 `repair_event` 并设置任务状态为 `repairing`，没有调用 Python | 在 `submitFeedback()` 中调用 `AiServiceClient.startRepairWorkflow()`，并传入 `feedbackText`、`category`、`targetType`、`currentState` |
-| M4-004 | `startRepairWorkflow()` 请求体与 Python Schema 不一致 | 高 | Java 原来只发送 `repairEventId` 和 `targetType`，但 Python `RepairRequest` 要求 `feedbackText` 和 `category` | 修改 Java client，补齐 Python request schema 需要的字段 |
-| M4-005 | repair 成功回调会产生非法状态自跳 | 高 | Python repair 成功后回调 `nextTaskStatus=repairing`；Java callback 又把 repair retry target 解析为 `repairing`，导致 `repairing -> repairing` | repair callback 改为根据 `targetType` 跳到局部重生成状态，例如 `video_clip -> video_clip_generating`、`keyframe -> image_generating` |
-| M4-006 | `reference_analysis` 回调状态与 Java 状态机不一致 | 中 | Python reference workflow 成功后回调 `waiting_asset_confirmation`，但 Java `reference_analysis` handler 实际推进到 `plan_generating` | Python workflow 和 AI 输出契约统一改为 `reference_analysis -> plan_generating` |
-| M4-007 | repair callback 无法稳定回写 `repair_events` | 中 | Java callback 原来尝试从 `targetId` 找 repair event，但 repair 的目标对象和 repair event 是两件事 | 在 `RepairResult` 中增加可选 `repairEventId`，Python repair workflow 回调时带回，Java callback 优先用它更新 repair event |
-| M4-008 | M4 验收文档仍把已修复问题描述为“未接线” | 低 | 验收文档中的风险项和未完成项没有随代码修复同步更新 | 更新 `M4-Results-And-Acceptance.md` 中 reference / repair 的状态描述和 Java 接线状态 |
+M4 的目标不是接入真实图片生成模型，而是在真实 Provider 之前，把关键帧阶段的业务闭环跑通：
+
+```text
+storyboard confirmed
+  -> keyframe_configuring
+  -> 用户上传关键帧 / 请求 AI fake 生成
+  -> image_generating
+  -> fake callback 写入 keyframes
+  -> waiting_image_confirmation
+  -> 用户逐帧确认 / 驳回 / 重新生成
+  -> 所有 storyboard shots 都确认后进入 video_clip_generating
+```
+
+复盘后发现，M4 原来的问题不在“有没有接口或页面”，而在验收判断过松：只要页面和 API 存在，就被写成通过，但关键帧数据完整性、状态推进条件、fake 图片预览、shot 关联关系都存在缺口。
 
 ---
 
-## 3. 修复后的关键链路
+## 2. 已解决的问题
 
-### 3.1 关键帧到视频片段
+### M4-001：只确认部分关键帧也可能推进到视频片段生成
 
-修复前：
+严重级别：高  
+影响范围：状态机、视频片段生成、M5/M6 后续链路  
+涉及文件：
 
-```text
-用户确认全部关键帧
-  -> Java 设置 video_tasks.status = video_clip_generating
-  -> 没有触发 Python
-  -> 任务停在 video_clip_generating
+- `apps/api-java/src/main/java/com/tk/ai/video/module/keyframe/service/impl/KeyframeServiceImpl.java`
+
+#### 问题现象
+
+原逻辑只统计当前版本 keyframe 表中未确认记录的数量：
+
+```java
+count status != 'confirmed'
 ```
 
-修复后：
+如果 storyboard 有 6 个 shots，但数据库里只存在 1 条 keyframe，且这一条已经 confirmed，那么未确认数量就是 0，系统可能误以为“全部确认完成”，从而进入：
 
 ```text
-用户确认全部关键帧
-  -> Java 设置 video_tasks.status = video_clip_generating
-  -> Java 调用 /ai/workflows/video-clip-generation
-  -> Python 执行 FashionVideoClipWorkflow
-  -> Python 回调 Java stage=video_clip
-  -> Java 推进到 waiting_video_clip_confirmation
+video_clip_generating
 ```
 
-### 3.2 用户反馈到局部修复
+这会导致视频片段生成阶段缺关键帧输入。
 
-修复前：
+#### 根因
+
+系统把“已存在 keyframe 记录的确认状态”当成了“storyboard 所有 shot 的确认状态”。
+
+正确基准应该是 storyboard shots，而不是 keyframes 表里已有多少条记录。
+
+#### 解决方案
+
+新增完整性判断：
 
 ```text
-用户提交反馈
-  -> Java 创建 repair_event
-  -> Java 设置 video_tasks.status = repairing
-  -> 没有触发 Python repair workflow
+对当前 storyboard 的每个 shot：
+  1. 必须存在当前版本 keyframe
+  2. keyframe.status 必须等于 confirmed
+  3. 如果 keyframe.shotId 已存在，则必须和 storyboard shot.id 对得上
 ```
 
-修复后：
+只有全部满足，才允许进入：
 
 ```text
-用户提交反馈
-  -> Java 创建 repair_event
-  -> Java 设置 video_tasks.status = repairing
-  -> Java 调用 /ai/workflows/repair
-  -> Python 执行 FashionRepairWorkflow
-  -> Python 回调 Java stage=repair
-  -> Java 根据 targetType 进入局部重生成状态
+waiting_image_confirmation -> video_clip_generating
 ```
 
-当前映射关系：
+#### 修复后行为
 
-| targetType | repair 成功后的目标状态 |
+| 场景 | 修复前 | 修复后 |
+|---|---|---|
+| 6 个 shots，只确认 1 个 | 可能推进到 video_clip_generating | 不推进 |
+| 6 个 shots，存在 5 个 confirmed，缺 1 个 | 可能推进 | 不推进 |
+| 6 个 shots，全部 confirmed | 推进 | 推进 |
+
+---
+
+### M4-002：批量 generate 没有处理 rejected / failed keyframe
+
+严重级别：高  
+影响范围：用户重新生成关键帧、M4 验收规则  
+涉及文件：
+
+- `KeyframeServiceImpl.java`
+
+#### 问题现象
+
+M4 规则要求：
+
+```text
+批量 generate 只能生成 missing / rejected / failed 的 shots
+```
+
+但原逻辑是：
+
+```text
+只要某个 shot 已经存在 keyframe，就跳过
+```
+
+所以 rejected / failed 的关键帧不会被批量重新生成，用户只能逐帧 regenerate。
+
+#### 根因
+
+原逻辑只判断“是否存在 keyframe”，没有根据 keyframe status 判断是否应该重新生成。
+
+#### 解决方案
+
+批量生成时按状态分类：
+
+应该生成：
+
+- missing
+- draft
+- rejected
+- failed
+
+应该跳过：
+
+- uploaded
+- generated
+- confirmed
+- generating
+
+#### 修复后行为
+
+| keyframe 状态 | 批量 generate 行为 |
 |---|---|
-| `keyframe` | `image_generating` |
-| `video_clip` | `video_clip_generating` |
-| `render_manifest` | `rendering` |
-| `final_video` | `rendering` |
-| 其他 / 缺省 | `keyframe_configuring` |
+| missing | 生成 |
+| draft | 生成 |
+| rejected | 重新生成 |
+| failed | 重新生成 |
+| uploaded | 跳过 |
+| generated | 跳过 |
+| confirmed | 跳过 |
+| generating | 跳过 |
 
-### 3.3 参考视频分析
+---
 
-修复前：
+### M4-003：同一 shot 可能产生重复 keyframe
 
-```text
-reference_analyzing
-  -> Python callback nextTaskStatus=waiting_asset_confirmation
-  -> Java 实际 handler 推进到 plan_generating
-  -> Python / Java / 文档语义不一致
+严重级别：中高  
+影响范围：前端展示、确认逻辑、后续视频片段生成  
+涉及文件：
+
+- `KeyframeServiceImpl.java`
+
+#### 问题现象
+
+同一个 shot 多次上传或请求 AI 生成时，可能插入多条 keyframe。
+
+前端通过：
+
+```ts
+keyframes.find((k) => k.shotNo === shotNo)
 ```
 
-修复后：
+拿第一条匹配记录。如果旧记录是 rejected / draft，新记录已经 uploaded / generated，前端仍可能显示旧状态，造成用户误解。
+
+#### 根因
+
+创建 keyframe 时没有使用：
 
 ```text
-reference_analyzing
-  -> Python callback nextTaskStatus=plan_generating
-  -> Java handler 推进到 plan_generating
-  -> 契约、代码、状态机一致
+taskId + shotNo + currentVersion
+```
+
+作为当前版本下同一 shot 的幂等键。
+
+#### 解决方案
+
+创建/上传/请求 AI 生成时：
+
+1. 先查询当前版本是否已有同 shotNo 的 keyframe。
+2. 如果已有，更新这条记录。
+3. 如果没有，才插入新记录。
+4. 如果已有记录是 `confirmed`，不允许直接覆盖。
+
+#### 修复后行为
+
+| 场景 | 行为 |
+|---|---|
+| shot 1 第一次上传 | 插入 keyframe |
+| shot 1 rejected 后重新上传 | 更新原 keyframe |
+| shot 1 failed 后批量生成 | 更新原 keyframe |
+| shot 1 confirmed 后再次上传 | 拒绝覆盖 |
+
+---
+
+### M4-004：keyframe 缺少 storyboard shot 关联
+
+严重级别：中高  
+影响范围：M5 视频片段、repair、render manifest  
+涉及文件：
+
+- `KeyframeServiceImpl.java`
+- `apps/api-java/src/main/java/com/tk/ai/video/module/callback/service/impl/AiCallbackServiceImpl.java`
+
+#### 问题现象
+
+`KeyframeEntity` 有字段：
+
+```java
+storyboardId
+shotId
+```
+
+但原先创建 keyframe 时没有稳定填充。后续只能靠 `shotNo` 关联 storyboard shot。
+
+#### 根因
+
+M4 只关注了“每个 shotNo 有一张关键帧”，没有把 keyframe 和 storyboard shot 的真实主键关系建立起来。
+
+#### 风险
+
+只靠 `shotNo` 有几个隐患：
+
+- 分镜重排后 shotNo 可能变化。
+- 多版本 repair 后 shotNo 可能复用。
+- render manifest 难以稳定追踪素材来源。
+- M5/M6 生成视频片段时不好定位对应分镜。
+
+#### 解决方案
+
+在以下路径补齐 `storyboardId` 和 `shotId`：
+
+1. 用户上传 keyframe。
+2. 用户单帧请求 AI 生成。
+3. 批量生成 keyframe。
+4. Python keyframe callback 回写结果。
+
+#### 修复后数据关系
+
+```text
+storyboards.id
+  -> storyboard_shots.storyboard_id
+  -> keyframes.storyboard_id
+  -> keyframes.shot_id
+```
+
+后续视频片段和 render manifest 可以优先使用 `shotId` 做稳定关联。
+
+---
+
+### M4-005：fake provider 返回不可预览 URL
+
+严重级别：中  
+影响范围：前端验收、用户体验  
+涉及文件：
+
+- `services/ai-orchestrator/src/providers/fake_image.py`
+
+#### 问题现象
+
+原 fake provider 返回类似：
+
+```text
+https://placeholder.cos.ap-guangzhou.myqcloud.com/...
+```
+
+如果这个域名或路径不可访问，前端会显示 broken image。
+
+这和 M4 验收标准冲突：
+
+```text
+callback 后能看到生成图片预览
+```
+
+#### 根因
+
+fake provider 返回的是外部占位 URL，但没有保证资源真实存在。
+
+#### 解决方案
+
+fake provider 改为返回内联 SVG data URL：
+
+```text
+data:image/svg+xml;base64,...
+```
+
+特点：
+
+- 不依赖外部网络。
+- 不消耗模型费用。
+- 每个 shot 返回确定性预览图。
+- 前端 `<img>` 可以直接显示。
+
+#### 修复后行为
+
+| 场景 | 修复前 | 修复后 |
+|---|---|---|
+| fake callback 返回图片 | 可能 broken image | 直接显示 SVG 占位图 |
+| 离线开发 | 可能无法预览 | 可以预览 |
+| CI / 本地验收 | 不稳定 | 稳定 |
+
+---
+
+### M4-006：M4 验收文档结论过早且编码损坏
+
+严重级别：中  
+影响范围：复盘、交接、后续阶段判断  
+涉及文件：
+
+- `docs/Phase/M4-Results-And-Acceptance.md`
+- `docs/Phase/M4-Issues-And-Resolutions.md`
+
+#### 问题现象
+
+原文档存在两个问题：
+
+1. 大量中文乱码。
+2. 在关键链路没有端到端验证前，直接写成“已通过”。
+
+#### 根因
+
+文档把“代码存在 / 编译通过 / 页面存在”当成了“业务流程通过”。
+
+#### 解决方案
+
+重写 M4 验收文档和问题解决文档：
+
+- 使用 UTF-8 中文。
+- 明确区分：
+  - 已修复的问题
+  - 已验证的内容
+  - 仍需端到端验收的内容
+- 将 M4 状态改为：
+
+```text
+代码层关键缺口已修复；
+还需要跑一条真实任务做端到端验收后，才能把 M4 标记为完全通过。
+```
+
+---
+
+## 3. 修复后的关键流程
+
+### 3.1 批量生成关键帧
+
+```text
+用户点击一键 AI 生成
+  -> Java 读取 storyboard shots
+  -> Java 找出 missing / draft / rejected / failed 的 shots
+  -> Java 为目标 shots 创建或更新 keyframe 为 generating
+  -> Java 调用 Python /ai/workflows/keyframe-generation
+  -> Python fake_generate_keyframes 返回 data URL
+  -> Python callback Java stage=keyframe
+  -> Java 写入 keyframes
+  -> Java 推进到 waiting_image_confirmation
+```
+
+### 3.2 用户逐帧确认
+
+```text
+用户确认一个 keyframe
+  -> Java 设置该 keyframe.status = confirmed
+  -> Java 检查当前 storyboard 每个 shot 是否都有 confirmed keyframe
+  -> 如果没有全部确认：停留当前状态
+  -> 如果全部确认：进入 video_clip_generating
+```
+
+### 3.3 单帧重新生成
+
+```text
+用户驳回 / 生成失败
+  -> keyframe.status = rejected / failed
+  -> 用户点击重新生成
+  -> Java 将该 keyframe 设置为 generating
+  -> Java 只发送该 shot 的 storyboard payload
+  -> Python fake 生成单帧
+  -> callback 只更新该 shot 的 keyframe
 ```
 
 ---
 
 ## 4. 修改文件清单
 
-### 4.1 Java 后端
-
 | 文件 | 修改内容 |
 |---|---|
-| `apps/api-java/src/main/java/com/tk/ai/video/common/AiServiceClient.java` | 修改 `startVideoClipGeneration()` 请求体为 `storyboard/keyframes`；修改 `startRepairWorkflow()` 请求体，补齐 `feedbackText/category/currentState` |
-| `apps/api-java/src/main/java/com/tk/ai/video/module/keyframe/service/impl/KeyframeServiceImpl.java` | 所有关键帧确认后触发 `startVideoClipGeneration()`；修复 `waiting_image_confirmation -> waiting_image_confirmation` 自跳问题 |
-| `apps/api-java/src/main/java/com/tk/ai/video/module/videotask/service/impl/VideoTaskServiceImpl.java` | `submitFeedback()` 创建 repair event 后触发 `startRepairWorkflow()` |
-| `apps/api-java/src/main/java/com/tk/ai/video/module/callback/service/impl/AiCallbackServiceImpl.java` | repair callback 根据 `targetType` 进入目标重生成状态；优先使用 `repairEventId` 回写 repair event |
-
-### 4.2 Python AI Orchestrator
-
-| 文件 | 修改内容 |
-|---|---|
-| `services/ai-orchestrator/src/workflows/fashion_analysis.py` | `reference_analysis` 成功回调改为 `plan_generating` |
-| `services/ai-orchestrator/src/workflows/fashion_repair.py` | repair 成功回调改为目标类型对应状态；回传 `repairEventId` |
-| `services/ai-orchestrator/src/schemas/workflow_requests.py` | `VideoClipGenerationRequest.keyframes` 改为与 workflow 消费一致的 dict 结构 |
-| `services/ai-orchestrator/src/schemas/ai_outputs.py` | `RepairResult` 增加可选 `repairEventId` |
-| `services/ai-orchestrator/tests/test_callback_payloads.py` | 更新 reference / repair callback 预期状态 |
-| `services/ai-orchestrator/tests/test_workflows.py` | 更新 repair workflow 模拟链路，覆盖 `repairEventId` 和 `video_clip_generating` |
-
-### 4.3 契约与验收文档
-
-| 文件 | 修改内容 |
-|---|---|
-| `docs/03-ai-output-json-schema.md` | `RepairResult` 增加 `repairEventId`；callback stage contract 中 `reference_analysis` 改为 `plan_generating`；`repair` 改为目标类型状态 |
-| `docs/Phase/M4-Results-And-Acceptance.md` | 更新 M4 验收结论中的 Java 接线状态、reference 状态和 repair 状态 |
+| `apps/api-java/src/main/java/com/tk/ai/video/module/keyframe/service/impl/KeyframeServiceImpl.java` | 修复关键帧完整性判断；批量生成支持 rejected/failed；避免同 shot 重复 keyframe；写入 storyboardId/shotId |
+| `apps/api-java/src/main/java/com/tk/ai/video/module/callback/service/impl/AiCallbackServiceImpl.java` | keyframe callback 回写时补齐 storyboardId/shotId |
+| `services/ai-orchestrator/src/providers/fake_image.py` | fake provider 改为返回 SVG data URL，保证前端可预览 |
+| `docs/Phase/M4-Results-And-Acceptance.md` | 重写 M4 验收结论，修复乱码，标注仍需 E2E 验收 |
+| `docs/Phase/M4-Issues-And-Resolutions.md` | 本文档，整理问题、根因和方案 |
 
 ---
 
 ## 5. 验证结果
 
-| 验证项 | 命令 | 结果 |
-|---|---|---|
-| Python 单测 | `python -m pytest tests/ -q` | 通过，`60 passed` |
-| 契约同步检查 | `powershell -ExecutionPolicy Bypass -File scripts/check-contract-sync.ps1` | 通过，`Contract sync check passed` |
-| Java 测试 | `.\gradlew.bat test` | 通过，`BUILD SUCCESSFUL` |
-| 旧问题残留扫描 | `rg 'reference_analysis.*waiting_asset_confirmation|repair.*next=repairing|从未|未调用|缺少触发' ...` | 未发现残留 |
+已执行：
 
-说明：Python 测试时仍有 `.pytest_cache` 写入 warning，属于本地缓存目录权限问题，不影响测试结果。
+```text
+python -m py_compile services/ai-orchestrator/src/providers/fake_image.py services/ai-orchestrator/src/activities/fake_generate_keyframes.py
+```
+
+结果：通过。
+
+```text
+./gradlew.bat compileJava
+```
+
+结果：通过。
+
+```text
+npm run build
+```
+
+结果：通过。
+
+说明：
+
+Java 编译第一次在沙箱内遇到 Gradle wrapper 锁权限问题，使用授权后的非沙箱命令验证通过。
 
 ---
 
-## 6. 剩余风险
+## 6. 仍需端到端验收的场景
 
-| 编号 | 风险 | 影响 | 后续阶段 |
-|---|---|---|---|
-| RISK-M4-001 | 真实 Temporal Server 集成测试尚未运行 | 当前验证覆盖了 Python Activity / Schema / Java 编译测试，但没有证明真实 Temporal Worker 在线时完整链路一定可跑通 | M11 |
-| RISK-M4-002 | fake provider 返回的是占位资源 URL | 前端预览关键帧或视频片段时，可能看到占位或不可访问资源 | M5 / M6 |
-| RISK-M4-003 | video clip workflow 目前传入的 `storyboard` 仍是空对象 | fake 模式不受影响；真实视频生成阶段需要补齐 storyboard / keyframe / clip prompt 的完整上下文 | M6 |
+建议用一个包含 3 个 storyboard shots 的任务验证：
+
+1. 进入 `/keyframes`，应看到 3 张 shot 卡片。
+2. 只上传并确认 shot 1，任务不应进入 `video_clip_generating`。
+3. 批量 AI 生成其余 missing shots。
+4. fake callback 后应看到可预览图片，而不是 broken image。
+5. reject 一个 keyframe 后，批量 generate 应重新处理该 shot。
+6. failed keyframe 也应可被批量 generate 重新处理。
+7. 三个 keyframes 全部 confirmed 后，任务才进入 `video_clip_generating`。
+8. 进入 M5 `/clips` 时，应能拿到完整 keyframes payload。
 
 ---
 
-## 7. 给后续 AI 开发的注意事项
+## 7. 当前结论
 
-1. Java 是任务状态的唯一真实来源，Python callback 只能上报阶段结果，不能自行决定任意状态。
-2. 新增或修改 callback `stage`、`nextTaskStatus`、payload 字段时，必须同步检查：
-   - `docs/03-ai-output-json-schema.md`
-   - `services/ai-orchestrator/src/schemas/ai_outputs.py`
-   - `apps/api-java/src/main/java/com/tk/ai/video/module/callback/service/impl/AiCallbackServiceImpl.java`
-   - `scripts/check-contract-sync.ps1`
-3. repair 不应该回到 `repairing` 自身，而应该进入“具体要重做的那一环”。
-4. 如果真实视频生成要打开，必须先补齐 `VideoClipGenerationRequest.storyboard` 的真实内容，不能长期依赖空对象。
+M4 的代码层关键缺口已经修复。
+
+但 M4 不能只靠编译和页面存在来判定完成。最终通过条件应该是：
+
+```text
+真实任务端到端跑通：
+storyboard -> keyframes -> confirm all -> video_clip_generating
+```
+
+在完成上述 E2E 验收前，M4 状态应标记为：
+
+```text
+关键问题已修复，待端到端验收。
+```

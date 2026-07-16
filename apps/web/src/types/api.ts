@@ -51,6 +51,7 @@ export type TaskAsset = components["schemas"]["TaskAsset"] & {
   confirmed: boolean;
   createdAt: string;
 };
+export type TaskAssetListResponse = components["schemas"]["TaskAssetListResponse"];
 export type Product = components["schemas"]["Product"] & {
   id: string;
   name: string;
@@ -73,9 +74,13 @@ export type VideoTask = components["schemas"]["VideoTask"] & {
   retryCount: number;
   taskMode: TaskMode;
 };
+export type FashionAssetAnalysis = components["schemas"]["FashionAssetAnalysis"];
 export type CreateVideoTaskRequest = components["schemas"]["CreateVideoTaskRequest"];
 export type CreateVideoTaskData = RequiredCreateVideoTaskData;
 export type CreateVideoTaskResponse = components["schemas"]["CreateVideoTaskResponse"];
+export type CreateFashionTaskRequest = components["schemas"]["CreateFashionTaskRequest"];
+export type FashionTaskCreateResponse = components["schemas"]["FashionTaskCreateResponse"];
+export type FashionTaskCreateData = NonNullable<FashionTaskCreateResponse["data"]>;
 export type VideoPlan = components["schemas"]["VideoPlan"] & {
   planId: string;
   type: VideoType;

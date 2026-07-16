@@ -35,9 +35,8 @@ class TestFashionActivities:
     async def test_analyze_fashion_assets(self, sample_product_context):
         result = await analyze_fashion_assets("test-task-id", sample_product_context)
         validated = FashionAssetAnalysis.model_validate(result)
-        assert validated.productCategory
-        assert len(validated.styleAttributes) >= 1
-        assert len(validated.recommendedAngles) >= 1
+        assert validated.analysisText
+        assert len(validated.analyzedAssetIds) >= 1
 
     async def test_analyze_reference_video(self):
         result = await analyze_reference_video("test-task-id", "https://example.com/ref.mp4")
@@ -45,9 +44,8 @@ class TestFashionActivities:
         assert len(validated.shots) >= 1
 
     async def test_generate_fashion_plans(self, sample_product_context):
-        analysis = {"productCategory": "Dresses", "styleAttributes": ["Casual"],
-                     "recommendedAngles": ["Front"], "assetQualityScore": 80}
-        result = await generate_fashion_plans("test-task-id", analysis, sample_product_context)
+        creative_context = {"productProfile": sample_product_context, "assetAnalysis": {"summary": "Dress"}}
+        result = await generate_fashion_plans("test-task-id", creative_context)
         validated = CreativePlanResult.model_validate(result)
         assert len(validated.plans) >= 1
         # Each plan should have required fields
@@ -130,7 +128,8 @@ class TestFashionWorkflowEndToEnd:
     @pytest.mark.asyncio
     async def test_plan_to_storyboard_flow(self, sample_product_context, sample_plan):
         """Plan → Storyboard → validate callback chain."""
-        plan = await generate_fashion_plans(self.TASK_ID, {}, sample_product_context)
+        creative_context = {"productProfile": sample_product_context, "assetAnalysis": {}}
+        plan = await generate_fashion_plans(self.TASK_ID, creative_context)
         plan_payload = build_callback_payload(
             self.TASK_ID, "creative_plan", "success", "waiting_plan_selection",
             plans=plan["plans"],

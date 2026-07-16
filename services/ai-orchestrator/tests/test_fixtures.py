@@ -17,10 +17,9 @@ class TestFashionFixtures:
     def test_fashion_asset_analysis_fixture(self):
         data = get_fashion_fixture("fashion_asset_analysis")
         result = FashionAssetAnalysis.model_validate(data)
-        assert result.productCategory
-        assert len(result.styleAttributes) >= 1
-        assert len(result.recommendedAngles) >= 1
-        assert 0 <= result.assetQualityScore <= 100
+        assert result.analysisText
+        assert len(result.analyzedAssetIds) >= 1
+        assert result.model
 
     def test_reference_video_analysis_fixture(self):
         data = get_fashion_fixture("reference_video_analysis")
