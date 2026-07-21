@@ -139,7 +139,7 @@ export type PageResponse<T> = { code: number; message: string; data: { items: T[
 // Internal/legacy structure hints. Do not use this list as the creation entry.
 // Fashion Creative Loop V1 starts from taskMode; videoType is only an AI/rendering hint.
 export const V1_VIDEO_TYPES: VideoType[] = ["pain_point_solution", "before_after", "review"];
-export const V1_DURATIONS = [15, 20, 25, 30] as const;
+export const V1_DURATIONS = [8, 15, 20, 25, 30] as const;
 export const PRODUCT_IMAGE_FOLDERS = ["product-images"] as const;
 
 // Status display helpers

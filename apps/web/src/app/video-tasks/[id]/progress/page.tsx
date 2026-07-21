@@ -5,13 +5,14 @@ import { TaskProgress } from "@/components/task-progress";
 import { STATUS_LABELS, TASK_MODE_LABELS, VIDEO_TYPE_LABELS } from "@/types/api";
 import type { Video, VideoTask } from "@/types/api";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import { CancelTaskButton } from "@/components/cancel-task-button";
 
 export default function TaskProgressPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [task, setTask] = useState<VideoTask | null>(null);
   const [videoId, setVideoId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -75,6 +76,21 @@ export default function TaskProgressPage() {
     return () => clearInterval(interval);
   }, [loadTask]);
 
+  // Auto-redirect based on status changes
+  useEffect(() => {
+    if (!task) return;
+    const status = task.status;
+    if (status === "waiting_storyboard_confirmation" || status === "storyboard_generating") {
+      router.push(`/video-tasks/${id}/storyboard`);
+    } else if (status === "keyframe_configuring" || status === "image_generating" || status === "waiting_image_confirmation") {
+      router.push(`/video-tasks/${id}/keyframes`);
+    } else if (status === "rendering" || status === "checking") {
+      router.push(`/video-tasks/${id}/clips`);
+    } else if (status === "completed" || status === "exported") {
+      // stay on progress page to show completion
+    }
+  }, [task?.status, id]);
+
   async function handleRetry() {
     setRetrying(true);
     try {
@@ -115,7 +131,8 @@ export default function TaskProgressPage() {
 
   const isCompleted = task.status === "completed" || task.status === "exported";
   const isFailed = task.status === "failed";
-  const isTerminal = isCompleted || isFailed;
+  const isCancelled = task.status === "cancelled";
+  const isTerminal = isCompleted || isFailed || isCancelled;
   const isFashionAssetStage = ["asset_uploading", "asset_analyzing", "waiting_asset_confirmation"].includes(task.status);
   const isFashionKeyframeStage = ["keyframe_configuring", "image_generating", "waiting_image_confirmation"].includes(task.status);
   const isFashionClipStage = ["video_clip_generating", "waiting_video_clip_confirmation"].includes(task.status);

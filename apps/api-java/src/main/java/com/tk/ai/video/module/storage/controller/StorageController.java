@@ -8,10 +8,8 @@ import com.tk.ai.video.security.UserPrincipal;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/storage")
@@ -26,5 +24,26 @@ public class StorageController {
             @AuthenticationPrincipal UserPrincipal principal
     ) {
         return ApiResponse.ok(storageService.generatePresignedUploadUrl(request, principal.getUserId()));
+    }
+
+    @PostMapping("/upload")
+    public ApiResponse<PresignedUploadResponse> uploadFile(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("folder") String folder,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        return ApiResponse.ok(storageService.uploadFile(file, folder, principal.getUserId()));
+    }
+
+    @PostMapping("/proxy-download")
+    public ApiResponse<PresignedUploadResponse> proxyDownload(
+            @RequestBody java.util.Map<String, String> request,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        String url = request.get("url");
+        if (url == null || url.isBlank()) {
+            throw new com.tk.ai.video.common.BusinessException("url is required");
+        }
+        return ApiResponse.ok(storageService.proxyDownload(url, principal.getUserId()));
     }
 }

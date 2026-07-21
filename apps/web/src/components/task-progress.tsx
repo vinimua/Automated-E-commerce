@@ -29,7 +29,7 @@ const FASHION_STAGE_ORDER = FASHION_STAGES.map((s) => s.key);
 const LEGACY_STAGE_ORDER = LEGACY_STAGES.map((s) => s.key);
 
 function resolveStageIndex(status: string, stages: typeof FASHION_STAGES): number {
-  if (status === "failed") return -2;
+  if (status === "failed" || status === "cancelled") return -2;
   const keys = stages.map((s) => s.key);
 
   // Exact match
@@ -68,6 +68,7 @@ export function TaskProgress({
   const stages = isFashion ? FASHION_STAGES : LEGACY_STAGES;
   const currentIdx = resolveStageIndex(status, stages);
   const isFailed = status === "failed";
+  const isCancelled = status === "cancelled";
 
   return (
     <div className="space-y-4">
@@ -99,12 +100,12 @@ export function TaskProgress({
                   className={cn(
                     "relative z-10 flex h-8 w-8 items-center justify-center rounded-full border-2",
                     isCompleted && "border-primary bg-primary text-primary-foreground",
-                    isCurrent && !isFailed && "border-primary bg-background text-primary",
+                    isCurrent && !isFailed && !isCancelled && "border-primary bg-background text-primary",
                     isUpcoming && "border-muted bg-background text-muted-foreground",
-                    isFailed && "border-destructive bg-destructive/10 text-destructive"
+                    (isFailed || isCancelled) && "border-destructive bg-destructive/10 text-destructive"
                   )}
                 >
-                  {isFailed ? (
+                  {(isFailed || isCancelled) ? (
                     <XCircle className="h-4 w-4" />
                   ) : isCompleted ? (
                     <Check className="h-4 w-4" />
@@ -129,8 +130,8 @@ export function TaskProgress({
       </div>
 
       {/* Current status label */}
-      <p className={cn("text-center text-sm", isFailed ? "text-destructive font-medium" : "text-muted-foreground")}>
-        {isFailed ? "任务失败" : STATUS_LABELS[status] || status}
+      <p className={cn("text-center text-sm", (isFailed || isCancelled) ? "text-destructive font-medium" : "text-muted-foreground")}>
+        {isFailed ? "任务失败" : isCancelled ? "任务已取消" : STATUS_LABELS[status] || status}
       </p>
 
       {/* Error message */}

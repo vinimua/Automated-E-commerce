@@ -160,7 +160,7 @@ class VideoPlanItem(StrictModel):
     hook: str = Field(min_length=1, max_length=200)
     structure: str = Field(min_length=1)
     reason: str = Field(min_length=1)
-    estimatedDuration: int = Field(ge=15, le=30)
+    estimatedDuration: int = Field(ge=8, le=60)
     score: int = Field(ge=0, le=100)
 
 
@@ -195,7 +195,7 @@ class StoryboardResult(StrictModel):
 
     title: str = Field(min_length=1, max_length=200)
     hook: str = Field(min_length=1, max_length=200)
-    duration: int = Field(ge=15, le=30)
+    duration: int = Field(ge=8, le=60)
     caption: str = Field(min_length=1, max_length=500)
     hashtags: list[str] = Field(min_length=1, max_length=10)
     coverText: str = Field(min_length=1, max_length=80)
@@ -264,7 +264,11 @@ class FashionAssetAnalysis(StrictModel):
     analyzedAt: str = Field(min_length=1)
 
 
-class ReferenceShotItem(StrictModel):
+class ReferenceShotItem(BaseModel):
+    """Single reference video shot. Allows extra fields because vision LLMs may
+    add per-shot annotations (reusablePatterns, riskTips, etc.)."""
+    model_config = {"extra": "ignore"}
+
     shotNo: int = Field(ge=1)
     startTime: Optional[float] = Field(default=None, ge=0)
     endTime: Optional[float] = Field(default=None, ge=0)
@@ -275,6 +279,19 @@ class ReferenceShotItem(StrictModel):
     transition: Optional[str] = None
     subtitle: Optional[str] = None
     structureRole: Optional[str] = None
+
+    @model_validator(mode="after")
+    def duration_consistency(self) -> "ReferenceShotItem":
+        """Validate: duration ≈ endTime - startTime when all three are present."""
+        if self.startTime is not None and self.endTime is not None and self.duration is not None:
+            expected = round(self.endTime - self.startTime, 1)
+            actual = round(self.duration, 1)
+            if abs(expected - actual) > 0.2:
+                raise ValueError(
+                    f"Shot {self.shotNo}: duration ({self.duration}) != "
+                    f"endTime ({self.endTime}) - startTime ({self.startTime}) = {expected}"
+                )
+        return self
 
 
 class ReferenceVideoAnalysis(StrictModel):
@@ -287,6 +304,41 @@ class ReferenceVideoAnalysis(StrictModel):
     shots: list[ReferenceShotItem] = Field(min_length=1)
     reusablePatterns: list[str] = Field(default_factory=list)
     riskTips: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def shot_timeline_consistency(self) -> "ReferenceVideoAnalysis":
+        """Validate sequential shotNo, no overlap, last-shot≈total-duration."""
+        for idx, shot in enumerate(self.shots, start=1):
+            if shot.shotNo != idx:
+                raise ValueError(
+                    f"shotNo must be sequential from 1: expected {idx}, got {shot.shotNo}"
+                )
+            if shot.startTime is not None and shot.endTime is not None:
+                if shot.endTime <= shot.startTime:
+                    raise ValueError(
+                        f"Shot {shot.shotNo}: endTime ({shot.endTime}) must be > startTime ({shot.startTime})"
+                    )
+
+        for prev, curr in zip(self.shots, self.shots[1:]):
+            if (
+                prev.endTime is not None
+                and curr.startTime is not None
+                and curr.startTime < prev.endTime - 0.2
+            ):
+                raise ValueError(
+                    f"Shot {curr.shotNo} overlaps shot {prev.shotNo}: "
+                    f"startTime={curr.startTime} < prev.endTime={prev.endTime}"
+                )
+
+        if self.duration is not None and self.shots:
+            last_end = self.shots[-1].endTime
+            if last_end is not None and abs(last_end - self.duration) > 0.5:
+                raise ValueError(
+                    f"Last shot endTime ({last_end}) deviates from total duration "
+                    f"({self.duration}) by >0.5s"
+                )
+
+        return self
 
 
 class CreativePlanItem(VideoPlanItem):

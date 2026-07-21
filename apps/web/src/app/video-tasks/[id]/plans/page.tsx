@@ -66,6 +66,16 @@ export default function VideoTaskPlansPage() {
     return () => clearInterval(interval);
   }, [loadTask]);
 
+  // Auto-redirect when storyboard is ready
+  useEffect(() => {
+    if (!task) return;
+    if (task.status === "waiting_storyboard_confirmation") {
+      router.push(`/video-tasks/${id}/storyboard`);
+    } else if (task.status === "keyframe_configuring") {
+      router.push(`/video-tasks/${id}/keyframes`);
+    }
+  }, [task?.status, id]);
+
   async function selectPlan(planId: string) {
     setSelecting(true);
     setError("");

@@ -20,7 +20,8 @@ async def send_callback(payload: CallbackPayload) -> bool:
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            transport = httpx.AsyncHTTPTransport(retries=0)
+            async with httpx.AsyncClient(transport=transport, timeout=30.0) as client:
                 response = await client.post(
                     url,
                     json=body,

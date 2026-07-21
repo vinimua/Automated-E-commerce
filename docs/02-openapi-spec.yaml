@@ -1442,7 +1442,7 @@ components:
           format: uuid
         duration:
           type: integer
-          enum: [15, 20, 25, 30]
+          enum: [8, 15, 20, 25, 30]
         videoType:
           $ref: "#/components/schemas/VideoType"
           description: Legacy video structure hint. Optional for Fashion Creative Loop modes; AI creative_plan will produce the actual structure candidates.
@@ -1486,7 +1486,7 @@ components:
           enum: [en, zh, ja]
         duration:
           type: integer
-          enum: [15, 20, 25, 30]
+          enum: [8, 15, 20, 25, 30]
         videoType:
           $ref: "#/components/schemas/VideoType"
         needSubtitles:

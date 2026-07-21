@@ -165,44 +165,48 @@ FASHION_FIXTURES = {
     },
     "reference_video_analysis": {
         "title": "Summer Collection BTS",
-        "duration": 28.5,
-        "hook": "What I wear in a day: summer edition",
-        "structure": ["hook", "transition"],  # kept minimal for fixture
+        "duration": 10.0,
+        "hook": "通过模特自然走入画面、甩头发制造第一秒视觉吸引力",
+        "structure": ["hook", "outfit_reveal", "detail_proof"],
         "shots": [
             {
                 "shotNo": 1, "startTime": 0.0, "endTime": 3.2, "duration": 3.2,
-                "scene": "Model walks into frame, sunny outdoor setting",
-                "action": "Casual walk toward camera, hair flip",
-                "camera": "Medium shot, eye level",
-                "transition": "Quick cut",
-                "subtitle": "Summer day outfit #1",
+                "scene": "模特从画面右侧走入，阳光充足的户外场景，绿植虚化背景",
+                "action": "模特自然走向镜头，甩动头发，展示整体穿搭轮廓",
+                "camera": "中景，平视，固定机位，模特居中构图",
+                "transition": "硬切",
+                "subtitle": "夏日穿搭 #1",
                 "structureRole": "hook",
             },
             {
                 "shotNo": 2, "startTime": 3.2, "endTime": 6.8, "duration": 3.6,
-                "scene": "Full outfit reveal with slow spin",
-                "action": "Slow 360 spin showing dress flow",
-                "camera": "Full body, slight low angle",
-                "transition": "Fade",
-                "subtitle": "Obsessed with this floral print",
-                "structureRole": "body",
+                "scene": "模特全身出镜，展示连衣裙完整廓形和裙摆动态",
+                "action": "模特缓慢 360° 转身，裙摆自然飘动展示垂坠感",
+                "camera": "全景，轻微仰拍，固定机位",
+                "transition": "叠化",
+                "subtitle": "这个碎花印花太美了",
+                "structureRole": "outfit_reveal",
             },
             {
                 "shotNo": 3, "startTime": 6.8, "endTime": 10.0, "duration": 3.2,
-                "scene": "Close-up of fabric texture and print detail",
-                "action": "Hand runs over fabric, macro shot",
-                "camera": "Macro close-up",
-                "transition": "Quick cut",
-                "subtitle": "Look at the details!",
-                "structureRole": "body",
+                "scene": "面料纹理和印花细节特写，手指轻抚过连衣裙表面",
+                "action": "手指沿领口到腰线缓慢滑过，展示面料质感和印花精细度",
+                "camera": "特写，俯拍，手持轻微晃动，前景虚化构图",
+                "transition": None,
+                "subtitle": "细节控看这里！",
+                "structureRole": "detail_proof",
             },
         ],
         "reusablePatterns": [
-            "Hook → outfit reveal → detail close-up",
-            "Natural outdoor lighting aesthetic",
-            "POV-style text overlays",
+            "先展示整体穿搭轮廓再推进到面料细节，形成从轮廓到质地的信息递进",
+            "利用自然光线和户外场景营造生活化氛围，降低广告感",
+            "以第一人称口播字幕模拟真实分享语气，增强可信度",
         ],
-        "riskTips": ["Avoid showing identifiable brand logos in background"],
+        "riskTips": [
+            "含有可识别品牌 Logo 时需模糊处理",
+            "模特为真实人物，不可直接复制其形象用于 AI 生成",
+            "户外场景为常见穿搭视频套路，迁移时需更换场景和动作序列",
+        ],
     },
     "fashion_plans": {
         "plans": [
@@ -317,12 +321,12 @@ FASHION_FIXTURES = {
     },
     "keyframe_prompts": {
         "prompts": [
-            {"shotNo": 1, "purpose": "first_frame", "prompt": "Young woman in messy bedroom staring at overflowing closet, frustrated morning mood, soft natural light from window, candid shot", "negativePrompt": "blurry, low quality, deformed face, watermark"},
-            {"shotNo": 2, "purpose": "first_frame", "prompt": "Beautiful floral a-line dress on wooden hanger against clean white wall, boutique product photography, soft golden rim light", "negativePrompt": "wrinkled fabric, cluttered background, harsh shadows, watermark"},
-            {"shotNo": 3, "purpose": "first_frame", "prompt": "Fashion model in floral dress walking on cobblestone street, Parisian architecture background, golden hour sunlight, flowing fabric", "negativePrompt": "blurry, deformed body, extra limbs, modern cars, watermark"},
-            {"shotNo": 4, "purpose": "product_detail", "prompt": "Macro close-up of floral cotton fabric texture, visible weave pattern, soft focus depth of field, premium quality feel", "negativePrompt": "blurry, low resolution, synthetic-looking fabric"},
-            {"shotNo": 5, "purpose": "first_frame", "prompt": "Split screen composition: same model in cafe, park, and beach wearing identical floral dress, seamless color grading", "negativePrompt": "different outfits, inconsistent model appearance, harsh transitions"},
-            {"shotNo": 6, "purpose": "reference", "prompt": "Fashion model smiling warmly at camera, clean pastel background, soft beauty lighting, genuine happy expression", "negativePrompt": "blurry face, distorted smile, scary expression, harsh shadows"},
+            {"shotNo": 1, "purpose": "first_frame", "prompt": "Young woman in messy bedroom staring at overflowing closet, frustrated morning mood, soft natural light from window, candid shot, 9:16 vertical", "negativePrompt": "blurry, low quality, deformed face, watermark, wrong garment color, altered print"},
+            {"shotNo": 2, "purpose": "first_frame", "prompt": "Beautiful floral a-line dress on wooden hanger against clean white wall, boutique product photography, soft golden rim light, 9:16 vertical", "negativePrompt": "wrinkled fabric, cluttered background, harsh shadows, watermark, altered print, misplaced pattern"},
+            {"shotNo": 3, "purpose": "first_frame", "prompt": "Fashion model in floral dress walking on cobblestone street, Parisian architecture background, golden hour sunlight, flowing fabric, 9:16 vertical", "negativePrompt": "blurry, deformed body, extra limbs, modern cars, watermark, wrong garment color, altered print"},
+            {"shotNo": 4, "purpose": "product_detail", "prompt": "Macro close-up of floral cotton fabric texture, visible weave pattern, soft focus depth of field, premium quality feel, 9:16 vertical", "negativePrompt": "blurry, low resolution, synthetic-looking fabric, wrong garment color, altered print, misplaced pattern"},
+            {"shotNo": 5, "purpose": "first_frame", "prompt": "Split screen composition: same model in cafe, park, and beach wearing identical floral dress, seamless color grading, 9:16 vertical", "negativePrompt": "different outfits, inconsistent model appearance, harsh transitions, wrong garment color, altered print"},
+            {"shotNo": 6, "purpose": "reference", "prompt": "Fashion model smiling warmly at camera, clean pastel background, soft beauty lighting, genuine happy expression, 9:16 vertical", "negativePrompt": "blurry face, distorted smile, scary expression, harsh shadows, wrong garment color, deformed body, extra fingers"},
         ],
     },
     "fake_keyframes": {
@@ -337,12 +341,12 @@ FASHION_FIXTURES = {
     },
     "video_clip_prompts": {
         "prompts": [
-            {"shotNo": 1, "prompt": "Young woman in messy bedroom looking frustrated at clothes, candid handheld camera movement, soft morning lighting, 3 seconds", "negativePrompt": "blurry, stabilized, perfect lighting, studio look"},
-            {"shotNo": 2, "prompt": "Dress reveal with golden light sweep animation, fabric gently swaying, premium product showcase, 2 seconds", "negativePrompt": "static image, harsh lighting, wrinkles"},
-            {"shotNo": 3, "prompt": "Model walking confidently on sunlit Parisian street, dress flowing naturally, slow motion, golden hour, 5 seconds", "negativePrompt": "blurry, deformed body, modern elements, dark"},
-            {"shotNo": 4, "prompt": "Ken Burns slow zoom over dress details, fabric texture visible, soft focus background, 4 seconds", "negativePrompt": "static, blurry fabric, synthetic look"},
-            {"shotNo": 5, "prompt": "Match-cut transition between cafe, park, beach scenes with same model and dress, seamless morph effect, 5 seconds", "negativePrompt": "jumpy cuts, different outfits, inconsistent lighting"},
-            {"shotNo": 6, "prompt": "Model smiling warmly, natural expression, clean background, walking toward camera, 3 seconds", "negativePrompt": "distorted face, creepy smile, stiff movement"},
+            {"shotNo": 1, "prompt": "年轻女性站在杂乱衣柜前，表情困扰，手持镜头轻微晃动，柔和晨光从窗户照入，从静止画面开始缓慢推近到人物表情，3秒竖屏视频", "negativePrompt": "blurry, stabilized, perfect lighting, studio look, wrong garment color, warped fabric, deformed body, extra fingers, watermark"},
+            {"shotNo": 2, "prompt": "连衣裙挂在简约衣架上，金色光线扫过裙面，面料轻微飘动，镜头从模糊到清晰聚焦，产品级别展示，2秒竖屏视频", "negativePrompt": "static image, harsh lighting, wrinkles, altered print, misplaced pattern, warped fabric, watermark, text"},
+            {"shotNo": 3, "prompt": "模特穿着碎花连衣裙在阳光充足的街景中自然行走，裙摆随风飘动，金色时刻暖光，镜头跟拍，慢动作0.8倍速，5秒竖屏视频", "negativePrompt": "blurry, deformed body, extra limbs, dark, wrong garment color, altered print, warped fabric, inconsistent outfit, garment clipping"},
+            {"shotNo": 4, "prompt": "连衣裙面料纹理和印花细节特写，手指沿领口到腰线轻抚，镜头缓慢平移展示面料质感，柔焦背景，4秒竖屏视频", "negativePrompt": "static, blurry fabric, synthetic look, wrong garment color, altered print, lost detail, warped fabric, watermark"},
+            {"shotNo": 5, "prompt": "同一模特穿着同一碎花连衣裙在咖啡厅、公园、海滩三个场景间无缝切换，匹配剪辑转场，人物位置保持一致，暖色调，5秒竖屏视频", "negativePrompt": "jumpy cuts, different outfits, inconsistent lighting, wrong garment color, altered print, inconsistent outfit across frames, warped fabric"},
+            {"shotNo": 6, "prompt": "模特面对镜头温暖微笑，走向镜头，伸出手指向画面下方，干净背景，柔和美颜光线，画面定格在微笑表情，3秒竖屏视频", "negativePrompt": "distorted face, creepy smile, stiff movement, wrong garment color, deformed body, extra fingers, watermark, text, logo"},
         ],
     },
     "fake_video_clips": {
@@ -405,6 +409,10 @@ TEXT_TASK_TYPES = {
     "reference_video_analysis",
     "fashion_plans",
     "fashion_storyboard",
+    "video_clip_prompts",
+    "keyframe_prompts",
+    "feedback_classification",
+    "repair_plan",
 }
 
 
@@ -517,6 +525,13 @@ async def _call_openai_vision(
     image_urls: list[str],
     model: str,
 ) -> dict:
+    """Call a vision model via OpenAI-compatible or Volcengine Responses API."""
+    provider = (settings.vision_llm_provider or settings.text_llm_provider).lower()
+    if provider == "volcengine_responses":
+        return await _call_volcengine_responses(
+            task_type, system_prompt, user_prompt, image_urls, None, model
+        )
+
     try:
         from openai import AsyncOpenAI
     except ImportError:
@@ -559,6 +574,91 @@ async def _call_openai_vision(
     return _parse_llm_json(content_text)
 
 
+async def _call_volcengine_responses(
+    task_type: str,
+    system_prompt: str,
+    user_prompt: str,
+    image_urls: list[str],
+    video_url: str | None,
+    model: str,
+) -> dict:
+    """Call Volcengine Responses API (/api/v3/responses) for vision tasks.
+
+    Supports images (input_image) and video (input_video).
+    """
+    api_key = settings.vision_llm_api_key or settings.text_llm_api_key or settings.openai_api_key
+    base_url = settings.vision_llm_base_url or settings.text_llm_base_url or settings.openai_base_url or "https://ark.cn-beijing.volces.com/api/v3"
+
+    # Build content blocks for the "input" array
+    content_blocks: list[dict] = []
+
+    # Add video if present
+    if video_url:
+        content_blocks.append({"type": "input_video", "video_url": video_url})
+
+    # Add images
+    prepared_image_urls = await _prepare_vision_image_urls(image_urls) if image_urls else []
+    for url in prepared_image_urls:
+        content_blocks.append({"type": "input_image", "image_url": url})
+
+    # Add text prompt
+    full_text = f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt
+    content_blocks.append({"type": "input_text", "text": full_text})
+
+    body = {
+        "model": model,
+        "input": [{"role": "user", "content": content_blocks}],
+    }
+
+    log.info(
+        "Volcengine Responses API: task_type=%s, model=%s, images=%d, video=%s",
+        task_type, model, len(prepared_image_urls), bool(video_url),
+    )
+
+    transport = httpx.AsyncHTTPTransport(retries=0)
+    async with httpx.AsyncClient(
+        transport=transport,
+        timeout=httpx.Timeout(settings.text_llm_timeout_seconds),
+    ) as client:
+        resp = await client.post(
+            f"{base_url}/responses",
+            json=body,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+        )
+        if not resp.is_success:
+            raise RuntimeError(
+                f"Volcengine Responses API error: HTTP {resp.status_code} - {resp.text[:500]}"
+            )
+        data = resp.json()
+
+    # Extract output text
+    output_list = data.get("output") or []
+    content_text = "{}"
+    for output_item in output_list:
+        if output_item.get("role") == "assistant":
+            for block in output_item.get("content") or []:
+                if block.get("type") == "output_text":
+                    t = block.get("text") or ""
+                    if t.strip():
+                        content_text = t
+                        break
+            if content_text != "{}":
+                break
+
+    usage = data.get("usage") or {}
+    tokens_in = usage.get("input_tokens") or usage.get("prompt_tokens") or 0
+    tokens_out = usage.get("output_tokens") or usage.get("completion_tokens") or 0
+
+    log.info(
+        "Volcengine Responses API complete: task_type=%s, model=%s, tokens_in=%d, tokens_out=%d",
+        task_type, model, tokens_in, tokens_out,
+    )
+    return _parse_llm_json(content_text)
+
+
 async def _prepare_vision_image_urls(image_urls: list[str]) -> list[str]:
     """Prepare image inputs for OpenAI-compatible vision APIs.
 
@@ -595,7 +695,9 @@ async def _prepare_vision_image_urls(image_urls: list[str]) -> list[str]:
 
 async def _download_image_as_data_url(url: str) -> str:
     timeout = settings.vision_llm_image_download_timeout_seconds
+    transport = httpx.AsyncHTTPTransport(retries=0)
     async with httpx.AsyncClient(
+        transport=transport,
         timeout=httpx.Timeout(timeout),
         follow_redirects=True,
         headers={
@@ -684,14 +786,35 @@ async def _call_anthropic(task_type: str, system_prompt: str, user_prompt: str, 
         system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
     )
-    # DeepSeek and other providers may return ThinkingBlock alongside TextBlock.
-    # Extract text from the first TextBlock, skipping thinking/reasoning blocks.
+    # DeepSeek and other reasoning models may return ThinkingBlock alongside
+    # (or instead of) TextBlock. Extract text from the first TextBlock, and
+    # fall back to the first ThinkingBlock.thinking if no text block exists.
     content_text = "{}"
     if response.content:
+        block_types = [type(b).__name__ for b in response.content]
+        log.info("Anthropic response blocks: %s, model=%s", block_types, model)
         for block in response.content:
-            if hasattr(block, "text"):
+            if hasattr(block, "text") and block.text:
                 content_text = block.text
                 break
+        else:
+            # No TextBlock found — try to use thinking content as a fallback
+            for block in response.content:
+                thinking = getattr(block, "thinking", None)
+                if thinking:
+                    log.warning(
+                        "Anthropic response has no TextBlock, using ThinkingBlock as fallback: "
+                        "task_type=%s, model=%s, thinking_len=%d",
+                        task_type, model, len(str(thinking)),
+                    )
+                    content_text = str(thinking)
+                    break
+        if content_text == "{}":
+            log.error(
+                "Anthropic response has no extractable text content: "
+                "task_type=%s, model=%s, blocks=%s",
+                task_type, model, block_types,
+            )
     tokens_in = response.usage.input_tokens if response.usage else 0
     tokens_out = response.usage.output_tokens if response.usage else 0
 

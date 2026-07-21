@@ -185,15 +185,15 @@ public class AiServiceClient {
     }
 
     public void startReferenceAnalysis(UUID taskId, UUID productId, UUID userId,
-                                        Map<String, Object> creativeState) {
+                                        String referenceUrl, Map<String, Object> productContext) {
         String correlationId = getOrCreateCorrelationId();
-        Map<String, Object> payload = Map.of(
-                "taskId", taskId.toString(),
-                "productId", productId.toString(),
-                "userId", userId.toString(),
-                "correlationId", correlationId,
-                "creativeState", creativeState != null ? creativeState : Map.of()
-        );
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("taskId", taskId.toString());
+        payload.put("productId", productId.toString());
+        payload.put("userId", userId.toString());
+        payload.put("correlationId", correlationId);
+        payload.put("referenceUrl", referenceUrl != null ? referenceUrl : "");
+        payload.put("productContext", productContext != null ? productContext : Map.of());
         fireAndForget("/ai/workflows/reference-analysis", payload, taskId, "ReferenceAnalysis");
     }
 

@@ -1241,7 +1241,7 @@ export interface components {
       /** Format: uuid */
       productId: string;
       /** @enum {integer} */
-      duration: 15 | 20 | 25 | 30;
+      duration: 8 | 15 | 20 | 25 | 30;
       /** @description Legacy video structure hint. Optional for Fashion Creative Loop modes; AI creative_plan will produce the actual structure candidates. */
       videoType?: components["schemas"]["VideoType"];
       /** @default true */
@@ -1263,7 +1263,7 @@ export interface components {
       /** @enum {string} */
       language: "en" | "zh" | "ja";
       /** @enum {integer} */
-      duration: 15 | 20 | 25 | 30;
+      duration: 8 | 15 | 20 | 25 | 30;
       videoType?: components["schemas"]["VideoType"];
       /** @default true */
       needSubtitles?: boolean;

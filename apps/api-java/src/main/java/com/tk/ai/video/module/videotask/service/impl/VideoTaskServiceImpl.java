@@ -54,7 +54,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class VideoTaskServiceImpl implements VideoTaskService {
 
-    private static final Set<Integer> ALLOWED_DURATIONS = Set.of(15, 20, 25, 30);
+    private static final Set<Integer> ALLOWED_DURATIONS = Set.of(8, 15, 20, 25, 30);
     private static final Set<String> ALLOWED_TASK_MODES = Set.of(
             "PRODUCT_CREATIVE", "REFERENCE_STORYBOARD", "USER_SCRIPT", "CUSTOM_STORYBOARD"
     );
@@ -101,7 +101,7 @@ public class VideoTaskServiceImpl implements VideoTaskService {
             throw new BusinessException("V1 only supports: " + String.join(", ", VideoType.V1_ALLOWED));
         }
         if (!ALLOWED_DURATIONS.contains(request.getDuration())) {
-            throw new BusinessException("Duration must be one of: 15, 20, 25, 30");
+            throw new BusinessException("Duration must be one of: 8, 15, 20, 25, 30");
         }
 
         // Validate product ownership
@@ -211,7 +211,7 @@ public class VideoTaskServiceImpl implements VideoTaskService {
             throw new BusinessException("CUSTOM_STORYBOARD mode requires storyboard text");
         }
         if (!ALLOWED_DURATIONS.contains(request.getDuration())) {
-            throw new BusinessException("Duration must be one of: 15, 20, 25, 30");
+            throw new BusinessException("Duration must be one of: 8, 15, 20, 25, 30");
         }
 
         // 2. Quota checks
@@ -319,7 +319,6 @@ public class VideoTaskServiceImpl implements VideoTaskService {
         Map<String, Object> productJson = new LinkedHashMap<>();
         productJson.put("name", request.getName());
         productJson.put("description", request.getDescription() != null ? request.getDescription() : "");
-        productJson.put("productLink", request.getProductLink() != null ? request.getProductLink() : "");
         productJson.put("imageUrls", imageUrls);
         productJson.put("targetMarket", request.getTargetMarket());
         productJson.put("language", request.getLanguage());
@@ -336,7 +335,6 @@ public class VideoTaskServiceImpl implements VideoTaskService {
         userReq.put("taskMode", taskMode);
         userReq.put("duration", request.getDuration());
         userReq.put("needSubtitles", request.getNeedSubtitles() != null ? request.getNeedSubtitles() : true);
-        userReq.put("description", request.getDescription() != null ? request.getDescription() : "");
         userReq.put("rawPrompt", request.getCreativePrompt() != null ? request.getCreativePrompt().trim() : "");
         userReq.put("parsed", Map.of());
         userReq.put("confirmed", Map.of());
@@ -520,6 +518,48 @@ public class VideoTaskServiceImpl implements VideoTaskService {
 
     @Override
     @Transactional
+    public VideoTaskStatusResponse regenerateStoryboard(UUID taskId, UUID userId) {
+        VideoTaskEntity task = findTask(taskId);
+        checkOwnership(task, userId);
+
+        if (!"waiting_storyboard_confirmation".equals(task.getStatus())) {
+            throw new BusinessException("Can only regenerate storyboard when status is waiting_storyboard_confirmation, current: " + task.getStatus());
+        }
+        if (task.getSelectedPlanId() == null) {
+            throw new BusinessException("No selected plan found, cannot regenerate storyboard");
+        }
+
+        VideoPlanEntity plan = videoPlanMapper.findOwnedPlan(task.getSelectedPlanId(), taskId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("VideoPlan", task.getSelectedPlanId()));
+
+        // Clean up old storyboard, shots, keyframes and video clips
+        storyboardMapper.findByTaskId(taskId).ifPresent(sb -> {
+            storyboardShotMapper.deleteByStoryboardId(sb.getId());
+            storyboardMapper.deleteById(sb.getId());
+        });
+        keyframeMapper.findByTaskIdAndVersion(taskId, task.getCurrentVersion())
+                .forEach(kf -> keyframeMapper.deleteById(kf.getId()));
+        videoClipMapper.findByTaskIdAndVersion(taskId, task.getCurrentVersion())
+                .forEach(clip -> videoClipMapper.deleteById(clip.getId()));
+
+        VideoTaskStateMachine.validateTransition(task.getStatus(), "storyboard_generating");
+        task.setStatus("storyboard_generating");
+        task.setProgress(40);
+        task.setUpdatedAt(OffsetDateTime.now());
+        videoTaskMapper.updateById(task);
+
+        aiServiceClient.startStoryboardGeneration(
+                taskId, task.getProductId(), userId,
+                plan.getId(), toSelectedPlanPayload(plan),
+                task.getDuration(), task.getVideoType(),
+                creativeContextAssembler.assemble(task));
+
+        log.info("Storyboard regeneration triggered: taskId={}", taskId);
+        return new VideoTaskStatusResponse(taskId, "storyboard_generating", 40);
+    }
+
+    @Override
+    @Transactional
     public VideoTaskStatusResponse requestRender(UUID taskId, UUID userId) {
         VideoTaskEntity task = findTask(taskId);
         checkOwnership(task, userId);
@@ -568,10 +608,43 @@ public class VideoTaskServiceImpl implements VideoTaskService {
         if (correlationId == null) {
             correlationId = UUID.randomUUID().toString();
         }
-        renderMessageProducer.sendRenderTask(taskId, renderTaskId, correlationId, renderManifest);
+        try {
+            renderMessageProducer.sendRenderTask(taskId, renderTaskId, correlationId, renderManifest);
+            log.info("Render requested: taskId={}, renderTaskId={}", taskId, renderTaskId);
+        } catch (Exception e) {
+            log.error("Failed to send render task: taskId={}, error={}", taskId, e.getMessage());
+            throw new BusinessException("渲染服务暂时不可用（RabbitMQ 连接失败），请稍后重试");
+        }
 
-        log.info("Render requested: taskId={}, renderTaskId={}", taskId, renderTaskId);
         return new VideoTaskStatusResponse(taskId, "rendering", 90);
+    }
+
+    private void simulateRenderComplete(VideoTaskEntity task, String renderTaskId, Map<String, Object> manifest) {
+        var video = videoMapper.findLatestByTaskId(task.getId()).orElse(null);
+        if (video == null) {
+            video = new com.tk.ai.video.module.video.entity.VideoEntity();
+            video.setId(UUID.randomUUID());
+            video.setTaskId(task.getId());
+            video.setProductId(task.getProductId());
+            video.setUserId(task.getUserId());
+            video.setDuration(task.getDuration() > 0 ? task.getDuration() : 30);
+            video.setResolution("1080x1920");
+        }
+        video.setTitle(task.getVideoType() + " render v" + task.getCurrentVersion());
+        video.setVideoUrl("https://placeholder.cos.ap-guangzhou.myqcloud.com/tk-ai-video/render/fallback_v" + task.getCurrentVersion() + ".mp4");
+        video.setStatus("completed");
+        if (videoMapper.selectById(video.getId()) != null) {
+            videoMapper.updateById(video);
+        } else {
+            videoMapper.insert(video);
+        }
+
+        task.setRenderTaskId(renderTaskId);
+        task.setStatus("waiting_final_review");
+        task.setProgress(95);
+        task.setUpdatedAt(OffsetDateTime.now());
+        videoTaskMapper.updateById(task);
+        log.info("Render simulated complete: taskId={}, renderTaskId={}", task.getId(), renderTaskId);
     }
 
     @Override

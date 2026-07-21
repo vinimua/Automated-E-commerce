@@ -43,6 +43,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**").permitAll()
                 // Internal callbacks — protected by InternalServiceTokenFilter
                 .requestMatchers("/api/ai-callbacks/**", "/api/render-callbacks/**").permitAll()
+                // Static uploads
+                .requestMatchers("/uploads/**").permitAll()
                 // Actuator
                 .requestMatchers("/actuator/**").permitAll()
                 // Admin endpoints require ADMIN role

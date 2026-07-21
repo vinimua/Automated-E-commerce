@@ -32,7 +32,7 @@ AI 服务所有输出必须满足以下要求：
 11. 回调 Java 的 Payload 必须携带 `schemaVersion`，V1 固定为 `1.0.0`。
 12. 阶段结果使用 `stage + status` 表达，禁止用业务任务状态代替阶段执行状态。
 
----
+--- 
 
 ## 3. ProductAnalysis Schema
 

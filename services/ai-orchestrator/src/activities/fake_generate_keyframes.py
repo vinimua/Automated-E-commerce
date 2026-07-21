@@ -1,11 +1,11 @@
-"""Activity: Generate keyframe images using FakeImageProvider (development phase).
+"""Activity: Generate keyframe images — real or fake provider based on config.
 
-M4 uses FakeImageProvider exclusively — real image generation for keyframes
-will be enabled in a later milestone via ENABLE_IMAGE_GENERATION.
+When ENABLE_IMAGE_GENERATION=true, uses Volcengine / OpenAI real image generation.
+Otherwise falls back to FakeImageProvider (zero-cost SVG placeholders).
 """
 
 from temporalio import activity
-from src.providers.fake_image import FakeImageProvider
+from src.providers.factory import get_image_provider
 from src.schemas.ai_outputs import KeyframeGenerationResult
 
 
@@ -13,13 +13,16 @@ from src.schemas.ai_outputs import KeyframeGenerationResult
 async def fake_generate_keyframes(task_id: str, prompts: dict, storyboard: dict) -> dict:
     """Generate keyframe images for each shot.
 
-    Always uses FakeImageProvider in M4. Individual per-shot failures
-    are captured as failed keyframe entries rather than aborting the entire batch.
+    Routes to the configured provider (real or fake). Individual per-shot
+    failures are captured as failed keyframe entries rather than aborting
+    the entire batch.
 
     Returns a KeyframeGenerationResult-compatible dict with 'keyframes' array.
     """
-    provider = FakeImageProvider()
+    provider = get_image_provider()
     prompts_list = prompts.get("prompts", [])
+    # Collect product image URLs from storyboard for img2img reference
+    source_assets = _collect_source_assets(storyboard)
     keyframes = []
 
     for p in prompts_list:
@@ -34,6 +37,7 @@ async def fake_generate_keyframes(task_id: str, prompts: dict, storyboard: dict)
                 negative_prompt=negative or "blurry, low quality, watermark, text",
                 shot_no=shot_no,
                 purpose=purpose,
+                source_assets=source_assets,
             )
             keyframes.append({
                 "shotNo": shot_no,
@@ -51,13 +55,15 @@ async def fake_generate_keyframes(task_id: str, prompts: dict, storyboard: dict)
                                  shot_no, result.get("provider"), result.get("url"))
         except Exception as e:
             activity.logger.error("Keyframe generation failed: shot=%d, error=%s", shot_no, e)
+            provider_name = getattr(provider, "provider_name", getattr(provider, "_model", "unknown"))
+            model_name = getattr(provider, "_model", "unknown")
             keyframes.append({
                 "shotNo": shot_no,
                 "status": "failed",
                 "prompt": prompt_text,
                 "negativePrompt": negative,
-                "provider": provider.provider_name,
-                "modelName": getattr(provider, "_model", "unknown"),
+                "provider": provider_name,
+                "modelName": model_name,
                 "errorMessage": str(e),
                 "source": "ai_generated",
                 "imagePurpose": purpose,
@@ -70,3 +76,18 @@ async def fake_generate_keyframes(task_id: str, prompts: dict, storyboard: dict)
                          sum(1 for k in keyframes if k["status"] == "completed"),
                          sum(1 for k in keyframes if k["status"] == "failed"))
     return result
+
+
+def _collect_source_assets(storyboard: dict) -> list[dict]:
+    """Collect product image URLs from storyboard context for img2img reference."""
+    assets = []
+    # Shots may have keyframeUrl references from previous keyframe generation
+    for shot in (storyboard.get("shots") or []):
+        kf_url = shot.get("keyframeUrl")
+        if kf_url:
+            assets.append({"url": kf_url})
+    # Storyboard may have a top-level assets list
+    for a in (storyboard.get("assets") or []):
+        if isinstance(a, dict) and a.get("url"):
+            assets.append(a)
+    return assets

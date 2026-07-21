@@ -9,8 +9,9 @@ import com.tk.ai.video.module.quota.mapper.UserQuotaMapper;
 import com.tk.ai.video.module.quota.service.QuotaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -48,7 +49,7 @@ public class QuotaServiceImpl implements QuotaService {
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void consumeQuota(UUID userId, UUID taskId, String type, int amount, String idempotencyKey) {
         // Step 1: Try to insert the idempotency record
         try {
@@ -62,8 +63,8 @@ public class QuotaServiceImpl implements QuotaService {
                     .idempotencyKey(idempotencyKey)
                     .build();
             quotaRecordMapper.insert(record);
-        } catch (DuplicateKeyException e) {
-            // Idempotent: already processed
+        } catch (DataIntegrityViolationException e) {
+            // Idempotent: already processed (catches DuplicateKeyException and other constraint violations)
             log.debug("Idempotent consume skipped for key={}", idempotencyKey);
             return;
         }
@@ -120,7 +121,7 @@ public class QuotaServiceImpl implements QuotaService {
                     .idempotencyKey(idempotencyKey)
                     .build();
             quotaRecordMapper.insert(record);
-        } catch (DuplicateKeyException e) {
+        } catch (DataIntegrityViolationException e) {
             log.debug("Idempotent refund skipped for key={}", idempotencyKey);
             return;
         }

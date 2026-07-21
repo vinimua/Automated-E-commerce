@@ -121,3 +121,44 @@ export async function apiRequest<T = unknown>(
 
   return res.json();
 }
+
+/** Upload a file via multipart/form-data. Returns the parsed JSON response. */
+export async function uploadFile<T = { fileUrl: string }>(
+  path: string,
+  formData: FormData
+): Promise<T> {
+  if (!accessToken && typeof window !== "undefined") {
+    accessToken = localStorage.getItem("accessToken");
+    refreshToken = localStorage.getItem("refreshToken");
+  }
+
+  const headers: Record<string, string> = {};
+  if (accessToken) {
+    headers["Authorization"] = `Bearer ${accessToken}`;
+  }
+
+  const url = `${API_BASE}${path}`;
+  let res = await fetch(url, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (res.status === 401) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      headers["Authorization"] = `Bearer ${accessToken}`;
+      res = await fetch(url, { method: "POST", headers, body: formData });
+    } else {
+      clearTokens();
+      notifyAuthExpired();
+    }
+  }
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, errorBody.message || res.statusText, errorBody);
+  }
+
+  return res.json();
+}

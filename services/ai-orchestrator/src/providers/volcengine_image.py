@@ -23,7 +23,8 @@ async def _download_as_base64(url: str, timeout: float = 15.0) -> Optional[str]:
     Returns None if the download fails for any reason.
     """
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        transport = httpx.AsyncHTTPTransport(retries=0)
+        async with httpx.AsyncClient(transport=transport, timeout=timeout) as client:
             resp = await client.get(url, follow_redirects=True)
             resp.raise_for_status()
         content_type = resp.headers.get("content-type", "image/png")
@@ -68,7 +69,7 @@ class VolcengineImageProvider(ImageGenerationProvider):
             raise RuntimeError("openai package not installed (needed for image generation)")
 
         source_assets = kwargs.get("source_assets") or []
-        size = kwargs.get("size", "1024x1024")
+        size = kwargs.get("size", "1440x2560")
         previous_result = kwargs.get("previous_result") or {}
 
         # Build the full prompt
@@ -108,16 +109,17 @@ class VolcengineImageProvider(ImageGenerationProvider):
 
         client = AsyncOpenAI(api_key=self._api_key, base_url=self._base_url)
 
+        is_edit = bool(kwargs.get("feedback") or kwargs.get("previous_result"))
+
         extra_body: dict = {}
         if ref_data_uris:
-            primary = ref_data_uris[0]
+            # Seedream 4.5 multi-image format: "image" is an array of URLs
+            extra_body["image"] = ref_data_uris
+            extra_body["sequential_image_generation"] = "disabled"
             log.info(
-                "VolcengineImageProvider: img2img mode, refs=%d collected, %d downloaded OK",
-                len(ref_urls), len(ref_data_uris),
+                "VolcengineImageProvider: %d ref images, mode=%s",
+                len(ref_data_uris), "EDIT" if is_edit else "GENERATE",
             )
-            extra_body["image"] = primary
-            if len(ref_data_uris) > 1:
-                extra_body["images"] = ref_data_uris
         else:
             log.warning("VolcengineImageProvider: text-to-image mode — NO refs downloaded! %d URLs attempted", len(ref_urls))
 

@@ -27,7 +27,7 @@ class SelectedPlanGenerationRequest(BaseModel):
     selectedPlanId: UUID
     productContext: dict = Field(default_factory=dict)
     selectedPlan: dict
-    duration: int = Field(ge=15, le=30)
+    duration: int = Field(ge=8, le=60)
     videoType: str
     needSubtitles: bool = True
     needVoiceover: bool = False
@@ -74,7 +74,7 @@ class StoryboardGenerationRequest(BaseModel):
     correlationId: str
     creativeContext: dict = Field(default_factory=dict)
     selectedPlan: dict
-    duration: int = Field(ge=15, le=30)
+    duration: int = Field(ge=8, le=60)
     videoType: str
 
 

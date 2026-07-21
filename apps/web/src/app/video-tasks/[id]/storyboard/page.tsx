@@ -16,6 +16,7 @@ export default function StoryboardPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
@@ -115,6 +116,28 @@ export default function StoryboardPage() {
     }
   }
 
+  async function handleRegenerate() {
+    if (!confirm("确定要重新生成分镜吗？当前分镜数据将被清除。")) return;
+    setRegenerating(true);
+    setError("");
+    try {
+      const res = await apiRequest<{ code: number; message: string }>(
+        `/api/video-tasks/${id}/regenerate-storyboard`,
+        { method: "POST" }
+      );
+      if (res.code === 0) {
+        setStoryboard(null);
+        setTaskStatus("storyboard_generating");
+      } else {
+        setError(res.message || "重新生成失败");
+      }
+    } catch (e: any) {
+      setError(e.message || "网络错误");
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-96 items-center justify-center">
@@ -126,10 +149,23 @@ export default function StoryboardPage() {
   if (!storyboard) {
     return (
       <div className="p-8">
-        <p className="text-destructive">分镜数据不存在 — 可能 AI 尚未生成</p>
-        <Link href={`/video-tasks/${id}/progress`} className="mt-2 inline-block text-sm text-primary hover:underline">
-          ← 返回进度页
-        </Link>
+        {taskStatus === "storyboard_generating" ? (
+          <div className="flex flex-col items-center gap-4 py-16">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+            <p className="font-medium">AI 正在重新生成分镜...</p>
+            <p className="text-sm text-muted-foreground">预计需要 30-60 秒，请稍后刷新</p>
+            <Link href={`/video-tasks/${id}/progress`} className="text-sm text-primary hover:underline">
+              ← 返回进度页
+            </Link>
+          </div>
+        ) : (
+          <>
+            <p className="text-destructive">分镜数据不存在 — 可能 AI 尚未生成</p>
+            <Link href={`/video-tasks/${id}/progress`} className="mt-2 inline-block text-sm text-primary hover:underline">
+              ← 返回进度页
+            </Link>
+          </>
+        )}
       </div>
     );
   }
@@ -155,14 +191,23 @@ export default function StoryboardPage() {
             {saving ? "保存中..." : "保存修改"}
           </button>
           {taskStatus === "waiting_storyboard_confirmation" && (
-            <button
-              onClick={handleConfirm}
-              disabled={confirming}
-              className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-            >
-              <CheckCircle className="h-4 w-4" />
-              {confirming ? "确认中..." : "确认分镜，进入关键帧"}
-            </button>
+            <>
+              <button
+                onClick={handleRegenerate}
+                disabled={regenerating}
+                className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+              >
+                {regenerating ? "重新生成中..." : "重新生成分镜"}
+              </button>
+              <button
+                onClick={handleConfirm}
+                disabled={confirming}
+                className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                <CheckCircle className="h-4 w-4" />
+                {confirming ? "确认中..." : "确认分镜，进入关键帧"}
+              </button>
+            </>
           )}
         </div>
       </div>

@@ -18,5 +18,7 @@ public interface KeyframeService {
 
     List<KeyframeResponse> generateKeyframes(UUID taskId, UUID userId);
 
-    List<KeyframeResponse> regenerateKeyframe(UUID taskId, UUID keyframeId, UUID userId);
+    List<KeyframeResponse> regenerateKeyframe(UUID taskId, UUID keyframeId, String prompt, UUID userId);
+
+    List<KeyframeResponse> unconfirmKeyframe(UUID taskId, UUID keyframeId, UUID userId);
 }

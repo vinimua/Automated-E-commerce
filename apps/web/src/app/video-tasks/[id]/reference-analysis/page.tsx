@@ -70,7 +70,10 @@ export default function ReferenceAnalysisPage() {
 
   const refVideo = creativeState?.referenceVideo as Record<string, unknown> | null | undefined;
   const refShots = (refVideo?.shots as ReferenceShot[]) || [];
-  const hasReference = refShots.length > 0;
+  const refUrl = refVideo?.url as string | undefined;
+  const hasReference = Boolean(refUrl);
+  const hasAnalysis = refShots.length > 0;
+  const isAnalyzing = task?.status === "reference_analyzing";
 
   return (
     <div className="mx-auto max-w-4xl space-y-8 p-8">
@@ -86,6 +89,23 @@ export default function ReferenceAnalysisPage() {
 
       {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
 
+      {/* Task-level error: reference analysis explicitly failed */}
+      {task?.status === "failed" && task?.failedStage === "reference_analysis" && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="inline-flex items-center rounded-full bg-destructive/20 px-2.5 py-0.5 text-xs font-medium text-destructive">
+              分析失败
+            </span>
+          </div>
+          <p className="text-sm text-destructive/80">
+            {task?.errorMessage || "视频分析失败，请检查视频链接是否可访问后重试。"}
+          </p>
+          {task?.errorCode && (
+            <p className="mt-1 text-xs text-muted-foreground">错误码: {task.errorCode}</p>
+          )}
+        </div>
+      )}
+
       {!hasReference ? (
         <div className="rounded-lg border bg-card p-12 text-center">
           <Film className="mx-auto h-10 w-10 text-muted-foreground" />
@@ -97,6 +117,23 @@ export default function ReferenceAnalysisPage() {
             className="mt-4 inline-block text-sm font-medium text-primary hover:underline">
             ← 返回素材管理
           </Link>
+        </div>
+      ) : isAnalyzing ? (
+        <div className="flex flex-col items-center gap-4 rounded-lg border bg-card p-12">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-lg font-medium">AI 正在分析参考视频结构</p>
+          <p className="text-sm text-muted-foreground">
+            正在下载视频并逐帧拆解镜头的场景、运镜、转场和字幕…
+          </p>
+          {refUrl && <p className="text-xs text-muted-foreground truncate max-w-md">视频: {refUrl}</p>}
+        </div>
+      ) : !hasAnalysis ? (
+        <div className="rounded-lg border bg-card p-12 text-center">
+          <Film className="mx-auto h-10 w-10 text-muted-foreground" />
+          <p className="mt-4 text-muted-foreground">参考视频分析尚未完成</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            AI 分析可能尚未开始或遇到错误，请稍后刷新页面。
+          </p>
         </div>
       ) : (
         <>
@@ -125,6 +162,50 @@ export default function ReferenceAnalysisPage() {
                 {(refVideo?.structure as string[])?.join(" → ") || "—"}
               </p>
             </div>
+          </div>
+
+          {/* Title & Hook */}
+          <div className="rounded-lg border bg-card p-6 space-y-3">
+            <div>
+              <span className="text-xs text-muted-foreground">视频标题</span>
+              <p className="text-lg font-semibold">{refVideo?.title as string || "—"}</p>
+            </div>
+            {refVideo?.hook != null && (
+              <div>
+                <span className="text-xs text-muted-foreground">开场钩子</span>
+                <p className="text-sm">{String(refVideo.hook)}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Reusable patterns & risk tips */}
+          <div className="grid grid-cols-2 gap-4">
+            {(() => {
+              const patterns = refVideo?.reusablePatterns as string[] | undefined;
+              return patterns && patterns.length > 0 && (
+                <div className="rounded-lg border bg-card p-4">
+                  <h3 className="text-sm font-semibold mb-2">可复用模式</h3>
+                  <ul className="space-y-1">
+                    {patterns.map((p, i) => (
+                      <li key={i} className="text-sm text-muted-foreground">· {p}</li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })()}
+            {(() => {
+              const tips = refVideo?.riskTips as string[] | undefined;
+              return tips && tips.length > 0 && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-50/50 p-4">
+                  <h3 className="text-sm font-semibold text-amber-700 mb-2">风险提示</h3>
+                  <ul className="space-y-1">
+                    {tips.map((t, i) => (
+                      <li key={i} className="text-sm text-amber-600">· {t}</li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Shot breakdown */}

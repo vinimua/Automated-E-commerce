@@ -70,9 +70,21 @@ public class KeyframeController {
     public ApiResponse<KeyframeListResponse> regenerateKeyframe(
             @PathVariable UUID taskId,
             @PathVariable UUID keyframeId,
+            @RequestBody(required = false) RegenerateKeyframeRequest request,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        String prompt = request != null ? request.getPrompt() : null;
+        return ApiResponse.ok(new KeyframeListResponse(taskId,
+                keyframeService.regenerateKeyframe(taskId, keyframeId, prompt, principal.getUserId())));
+    }
+
+    @PostMapping("/api/video-tasks/{taskId}/keyframes/{keyframeId}/unconfirm")
+    public ApiResponse<KeyframeListResponse> unconfirmKeyframe(
+            @PathVariable UUID taskId,
+            @PathVariable UUID keyframeId,
             @AuthenticationPrincipal UserPrincipal principal
     ) {
         return ApiResponse.ok(new KeyframeListResponse(taskId,
-                keyframeService.regenerateKeyframe(taskId, keyframeId, principal.getUserId())));
+                keyframeService.unconfirmKeyframe(taskId, keyframeId, principal.getUserId())));
     }
 }

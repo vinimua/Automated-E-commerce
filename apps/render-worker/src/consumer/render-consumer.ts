@@ -15,7 +15,7 @@ import { uploadToCOS } from "../services/cos-uploader";
 import { callbackJava, CallbackPayload } from "../services/java-callback";
 
 const QUEUE = config.renderQueue;
-const PREFETCH = 1; // One task at a time (render is CPU/memory intensive)
+const PREFETCH = 5; // Process up to 5 renders concurrently (fake renders are cheap)
 const RETRY_HEADER = "x-render-retry-count";
 
 export interface RenderMessage {

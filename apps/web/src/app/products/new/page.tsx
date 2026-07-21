@@ -1,6 +1,6 @@
 "use client";
 
-import { apiRequest } from "@/lib/api-client";
+import { apiRequest, uploadFile } from "@/lib/api-client";
 import { V1_DURATIONS } from "@/types/api";
 import type { CreateFashionTaskRequest, FashionTaskCreateResponse, TaskMode } from "@/types/api";
 import { useRouter } from "next/navigation";
@@ -41,17 +41,55 @@ export default function NewProductPage() {
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [productLink, setProductLink] = useState("");
   const [targetMarket, setTargetMarket] = useState("US");
-  const [language, setLanguage] = useState("en");
+  const [language, setLanguage] = useState("zh");
 
   const [referenceVideoUrl, setReferenceVideoUrl] = useState("");
   const [scriptText, setScriptText] = useState("");
   const [storyboardText, setStoryboardText] = useState("");
-  const [creativePrompt, setCreativePrompt] = useState("");
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState<string | null>(null);
+
+  async function doUpload(file: File, folder: string): Promise<string | null> {
+    setUploadingFile(file.name);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder", folder);
+      const res = await uploadFile<{ code: number; message: string; data: { fileUrl: string } }>(
+        "/api/storage/upload", formData
+      );
+      if (res.code === 0 && res.data?.fileUrl) {
+        return res.data.fileUrl;
+      }
+      setError("上传失败: " + (res.message || "未知错误"));
+      return null;
+    } catch (e: any) {
+      setError("上传失败: " + (e.message || "网络错误"));
+      return null;
+    } finally {
+      setUploadingFile(null);
+    }
+  }
+
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files) return;
+    for (const file of Array.from(files)) {
+      const url = await doUpload(file, "product-images");
+      if (url) setImageUrls(prev => [...prev, url]);
+    }
+  }
+
+  async function handleVideoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = await doUpload(file, "reference-videos");
+    if (url) setReferenceVideoUrl(url);
+  }
 
   function validateDetails() {
     if (!name.trim()) {
@@ -83,7 +121,7 @@ export default function NewProductPage() {
       const body: CreateFashionTaskRequest = {
         name: name.trim(),
         description,
-        productLink,
+        imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
         targetMarket: targetMarket as CreateFashionTaskRequest["targetMarket"],
         language: language as CreateFashionTaskRequest["language"],
         duration,
@@ -92,7 +130,6 @@ export default function NewProductPage() {
         referenceVideoUrl: taskMode === "REFERENCE_STORYBOARD" ? referenceVideoUrl.trim() : undefined,
         scriptText: taskMode === "USER_SCRIPT" ? scriptText.trim() : undefined,
         storyboardText: taskMode === "CUSTOM_STORYBOARD" ? storyboardText.trim() : undefined,
-        creativePrompt: creativePrompt.trim() || undefined,
       };
 
       const res = await apiRequest<FashionTaskCreateResponse>("/api/fashion-video-tasks", {
@@ -176,15 +213,70 @@ export default function NewProductPage() {
 
       {step === "details" && (
         <form onSubmit={createTask} className="space-y-4">
+          {/* File uploads: images + video */}
+          <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+            <p className="text-sm font-medium">上传素材</p>
+
+            <div>
+              <label className="text-xs text-muted-foreground">商品图片 (可多选)</label>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageUpload}
+                disabled={!!uploadingFile}
+                className="mt-1 w-full text-sm file:mr-3 file:rounded file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-xs file:text-primary-foreground hover:file:bg-primary/90"
+              />
+              {imageUrls.length > 0 && (
+                <p className="mt-1 text-xs text-muted-foreground">已上传 {imageUrls.length} 张图片</p>
+              )}
+              {uploadingFile && <p className="mt-1 text-xs text-primary">上传中: {uploadingFile}...</p>}
+            </div>
+
+            {taskMode === "REFERENCE_STORYBOARD" && (
+              <div>
+                <label className="text-xs text-muted-foreground">
+                  参考视频 {referenceVideoUrl ? "✓" : ""}
+                </label>
+                <input
+                  type="file"
+                  accept="video/*"
+                  onChange={handleVideoUpload}
+                  disabled={!!uploadingFile}
+                  className="mt-1 w-full text-sm file:mr-3 file:rounded file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-xs file:text-primary-foreground hover:file:bg-primary/90"
+                />
+                {referenceVideoUrl && (
+                  <p className="mt-1 text-xs text-muted-foreground truncate">视频: {referenceVideoUrl}</p>
+                )}
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              或手动输入 URL：
+            </p>
+          </div>
+
+          {/* Manual URL inputs */}
+          <div>
+            <label className="text-sm font-medium">商品图片 URL (每行一个)</label>
+            <textarea
+              value={imageUrls.join("\n")}
+              onChange={(e) => setImageUrls(e.target.value.split("\n").filter(Boolean))}
+              rows={2}
+              className="mt-1 w-full rounded-md border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              placeholder="https://..."
+            />
+          </div>
+
           {taskMode === "REFERENCE_STORYBOARD" && (
             <div>
-              <label className="text-sm font-medium">参考视频 URL *</label>
+              <label className="text-sm font-medium">参考视频 URL</label>
               <input
                 type="url"
                 value={referenceVideoUrl}
                 onChange={(e) => setReferenceVideoUrl(e.target.value)}
                 className="mt-1 w-full rounded-md border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                placeholder="https://..."
+                placeholder="https://...（或直接上传视频文件）"
               />
             </div>
           )}
@@ -237,17 +329,6 @@ export default function NewProductPage() {
             />
           </div>
 
-          <div>
-            <label className="text-sm font-medium">创作要求</label>
-            <textarea
-              value={creativePrompt}
-              onChange={(e) => setCreativePrompt(e.target.value)}
-              rows={4}
-              className="mt-1 w-full rounded-md border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-              placeholder="例如：做一个 20 秒海滩度假风视频，突出裙摆飘动，不要改变商品花纹。"
-            />
-            <p className="mt-1 text-xs text-muted-foreground">这段原文会直接提供给后续方案和分镜 AI。</p>
-          </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -269,23 +350,13 @@ export default function NewProductPage() {
                 onChange={(e) => setLanguage(e.target.value)}
                 className="mt-1 w-full rounded-md border px-3 py-2 text-sm focus:border-primary focus:outline-none"
               >
-                <option value="en">English</option>
                 <option value="zh">中文</option>
+                <option value="en">English</option>
                 <option value="ja">日本語</option>
               </select>
             </div>
           </div>
 
-          <div>
-            <label className="text-sm font-medium">商品链接</label>
-            <input
-              type="url"
-              value={productLink}
-              onChange={(e) => setProductLink(e.target.value)}
-              className="mt-1 w-full rounded-md border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-              placeholder="https://..."
-            />
-          </div>
 
           <div>
             <label className="text-sm font-medium">视频时长</label>

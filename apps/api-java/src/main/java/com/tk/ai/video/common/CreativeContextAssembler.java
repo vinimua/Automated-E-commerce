@@ -25,6 +25,8 @@ public class CreativeContextAssembler {
         CreativeStateEntity state = creativeStateMapper.findByTaskId(task.getId()).orElse(null);
         context.put("userRequest", state != null && state.getUserRequirementsJson() != null
                 ? state.getUserRequirementsJson() : Map.of());
+        context.put("referenceAnalysis", state != null && state.getReferenceVideoJson() != null
+                ? state.getReferenceVideoJson() : Map.of());
         context.put("assetAnalysis", task.getAssetAnalysis() != null ? task.getAssetAnalysis() : Map.of());
 
         Map<String, Object> workflow = new LinkedHashMap<>();

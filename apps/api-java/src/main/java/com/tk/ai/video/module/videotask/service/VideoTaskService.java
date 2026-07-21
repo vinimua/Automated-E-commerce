@@ -19,6 +19,7 @@ public interface VideoTaskService {
     // Fashion Creative Loop V1 methods
     VideoTaskStatusResponse confirmPlan(UUID taskId, ConfirmPlanRequest request, UUID userId);
     VideoTaskStatusResponse confirmStoryboard(UUID taskId, UUID userId);
+    VideoTaskStatusResponse regenerateStoryboard(UUID taskId, UUID userId);
     VideoTaskStatusResponse requestRender(UUID taskId, UUID userId);
     VideoTaskStatusResponse approveFinalReview(UUID taskId, UUID userId);
     VideoTaskStatusResponse submitFeedback(UUID taskId, FeedbackRequest request, UUID userId);

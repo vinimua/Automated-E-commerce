@@ -49,9 +49,11 @@ public class VideoClipController {
     public ApiResponse<VideoTaskStatusResponse> regenerateClip(
             @PathVariable UUID taskId,
             @PathVariable UUID clipId,
+            @RequestBody(required = false) ConfirmVideoClipRequest request,
             @AuthenticationPrincipal UserPrincipal principal
     ) {
-        return ApiResponse.ok(videoClipService.regenerateClip(taskId, clipId, principal.getUserId()));
+        String prompt = request != null ? request.getFeedback() : null;
+        return ApiResponse.ok(videoClipService.regenerateClip(taskId, clipId, prompt, principal.getUserId()));
     }
 
     @PostMapping("/api/video-tasks/{taskId}/video-clips/{clipId}/reject")
@@ -62,5 +64,14 @@ public class VideoClipController {
             @AuthenticationPrincipal UserPrincipal principal
     ) {
         return ApiResponse.ok(videoClipService.rejectClip(taskId, clipId, request, principal.getUserId()));
+    }
+
+    @PostMapping("/api/video-tasks/{taskId}/video-clips/{clipId}/unconfirm")
+    public ApiResponse<VideoTaskStatusResponse> unconfirmClip(
+            @PathVariable UUID taskId,
+            @PathVariable UUID clipId,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        return ApiResponse.ok(videoClipService.unconfirmClip(taskId, clipId, principal.getUserId()));
     }
 }

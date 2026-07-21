@@ -100,6 +100,32 @@ public class VideoClipServiceImpl implements VideoClipService {
 
     @Override
     @Transactional
+    public VideoTaskStatusResponse unconfirmClip(UUID taskId, UUID clipId, UUID userId) {
+        VideoTaskEntity task = findTask(taskId);
+        checkOwnership(task, userId);
+
+        if (!"waiting_video_clip_confirmation".equals(task.getStatus())) {
+            throw new BusinessException("Cannot unconfirm clips when task status is " + task.getStatus());
+        }
+
+        VideoClipEntity clip = videoClipMapper.findByIdAndTaskId(clipId, taskId)
+                .orElseThrow(() -> new ResourceNotFoundException("VideoClip", clipId));
+        ensureCurrentVersion(task, clip);
+
+        if (!"confirmed".equals(clip.getStatus())) {
+            throw new BusinessException("Only confirmed clips can be unconfirmed, current: " + clip.getStatus());
+        }
+
+        clip.setStatus("generated");
+        clip.setUpdatedAt(OffsetDateTime.now());
+        videoClipMapper.updateById(clip);
+
+        log.info("VideoClip unconfirmed: taskId={}, clipId={}, shotNo={}", taskId, clipId, clip.getShotNo());
+        return new VideoTaskStatusResponse(taskId, task.getStatus(), task.getProgress());
+    }
+
+    @Override
+    @Transactional
     public VideoTaskStatusResponse generateClips(UUID taskId, UUID userId) {
         VideoTaskEntity task = findTask(taskId);
         checkOwnership(task, userId);
@@ -151,7 +177,7 @@ public class VideoClipServiceImpl implements VideoClipService {
 
     @Override
     @Transactional
-    public VideoTaskStatusResponse regenerateClip(UUID taskId, UUID clipId, UUID userId) {
+    public VideoTaskStatusResponse regenerateClip(UUID taskId, UUID clipId, String prompt, UUID userId) {
         VideoTaskEntity task = findTask(taskId);
         checkOwnership(task, userId);
 
@@ -176,6 +202,9 @@ public class VideoClipServiceImpl implements VideoClipService {
 
         clip.setStatus("generating");
         clip.setErrorMessage(null);
+        if (prompt != null && !prompt.isBlank()) {
+            clip.setPrompt(prompt.trim());
+        }
         clip.setUpdatedAt(OffsetDateTime.now());
         videoClipMapper.updateById(clip);
 
@@ -187,11 +216,21 @@ public class VideoClipServiceImpl implements VideoClipService {
 
         StoryboardContext storyboardContext = loadStoryboardContext(task);
         Set<Integer> targetShotNos = Set.of(clip.getShotNo());
+        Map<String, Object> storyboardPayload = buildStoryboardPayload(storyboardContext, targetShotNos);
+        if (prompt != null && !prompt.isBlank() && storyboardPayload.get("shots") instanceof List<?> shots) {
+            for (Object s : shots) {
+                if (s instanceof Map<?, ?> shotMap) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> sm = (Map<String, Object>) shotMap;
+                    sm.put("prompt", prompt.trim());
+                }
+            }
+        }
         aiServiceClient.startVideoClipGeneration(
                 taskId,
                 task.getProductId(),
                 userId,
-                buildStoryboardPayload(storyboardContext, targetShotNos),
+                storyboardPayload,
                 buildKeyframePayload(confirmedKeyframes, targetShotNos, task.getCurrentVersion())
         );
 

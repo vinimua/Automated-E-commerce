@@ -49,7 +49,10 @@ class Settings:
     image_gen_api_key: str = os.getenv("IMAGE_GEN_API_KEY", "")
     image_gen_base_url: str = os.getenv("IMAGE_GEN_BASE_URL", "")
     image_gen_model: str = os.getenv("IMAGE_GEN_MODEL", "dall-e-3")
-    video_gen_provider: str = os.getenv("VIDEO_GEN_PROVIDER", "openai")
+    video_gen_provider: str = os.getenv("VIDEO_GEN_PROVIDER", "volcengine")
+    video_gen_model: str = os.getenv("VIDEO_GEN_MODEL", "doubao-seedance-1-5-pro-251215")
+    video_gen_api_key: str = os.getenv("VIDEO_GEN_API_KEY", "")
+    video_gen_base_url: str = os.getenv("VIDEO_GEN_BASE_URL", "")
     enable_image_generation: bool = os.getenv("ENABLE_IMAGE_GENERATION", "false").lower() == "true"
     enable_video_generation: bool = os.getenv("ENABLE_VIDEO_GENERATION", "false").lower() == "true"
     enable_langgraph_repair: bool = os.getenv("ENABLE_LANGGRAPH_REPAIR", "false").lower() == "true"

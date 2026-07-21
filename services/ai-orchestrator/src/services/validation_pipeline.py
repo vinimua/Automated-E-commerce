@@ -11,17 +11,31 @@ MAX_REPAIR_RETRIES = 3
 
 
 def extract_json(raw_text: str) -> str:
-    """Strip markdown fences, find the first JSON object."""
+    """Strip markdown fences, find the first JSON object or array."""
     text = raw_text.strip()
     # Remove markdown code fences
-    if text.startswith("```"):
-        lines = text.split("\n")
-        lines = [l for l in lines if not l.lstrip().startswith("```")]
-        text = "\n".join(lines).strip()
+    if "```" in text:
+        # Extract content between code fences if present
+        fence_match = re.search(r"```(?:\w+)?\s*\n(.*?)\n\s*```", text, re.DOTALL)
+        if fence_match:
+            text = fence_match.group(1).strip()
+        else:
+            lines = text.split("\n")
+            lines = [l for l in lines if not l.lstrip().startswith("```")]
+            text = "\n".join(lines).strip()
     # Find first { or [
     match = re.search(r"[\{\[]", text)
     if match:
         text = text[match.start():]
+    # Trim trailing content after the last } or ]
+    if text and text[0] == "{":
+        last_brace = text.rfind("}")
+        if last_brace != -1:
+            text = text[:last_brace + 1]
+    elif text and text[0] == "[":
+        last_bracket = text.rfind("]")
+        if last_bracket != -1:
+            text = text[:last_bracket + 1]
     return text
 
 

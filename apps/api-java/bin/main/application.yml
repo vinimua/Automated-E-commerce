@@ -2,6 +2,12 @@ spring:
   application:
     name: tk-ai-video-api
 
+  # File upload
+  servlet:
+    multipart:
+      max-file-size: 500MB
+      max-request-size: 500MB
+
   # PostgreSQL 数据源 (腾讯云服务器)
   datasource:
     url: ${DB_URL:jdbc:postgresql://124.223.200.16:15432/tk_ai_video}
@@ -83,7 +89,7 @@ internal-service:
 
 # AI 编排服务
 ai-orchestrator:
-  base-url: ${AI_ORCHESTRATOR_BASE_URL:http://localhost:8003}
+  base-url: ${AI_ORCHESTRATOR_BASE_URL:http://localhost:8015}
 
 # Java API public/base URL used inside async worker callback messages
 java-api:
@@ -109,6 +115,12 @@ cos:
   allowed-domains:
     - myqcloud.com
     - tencentcos.cn
+
+# Local file upload
+app:
+  upload:
+    base-dir: ${UPLOAD_BASE_DIR:uploads}
+    base-url: ${UPLOAD_BASE_URL:http://localhost:8099/uploads}
 
 # 服务端口
 server:

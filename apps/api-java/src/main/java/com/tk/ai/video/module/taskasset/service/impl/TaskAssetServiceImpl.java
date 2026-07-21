@@ -47,6 +47,7 @@ public class TaskAssetServiceImpl implements TaskAssetService {
     private final AiServiceClient aiServiceClient;
     private final CreativeContextAssembler creativeContextAssembler;
     private final com.tk.ai.video.module.creativestate.mapper.CreativeStateMapper creativeStateMapper;
+    private final com.tk.ai.video.module.storyboard.mapper.VideoPlanMapper videoPlanMapper;
 
     @Override
     public List<TaskAssetResponse> getAssets(UUID taskId, UUID userId) {
@@ -289,6 +290,28 @@ public class TaskAssetServiceImpl implements TaskAssetService {
         markRequestedAssetsConfirmed(request, assets);
 
         if ("asset_uploading".equals(task.getStatus())) {
+            // REFERENCE_STORYBOARD: optionally skip asset analysis to iterate on video analysis faster
+            boolean skipToRef = request != null && request.isSkipAssetAnalysis()
+                    && "REFERENCE_STORYBOARD".equals(task.getTaskMode());
+            if (skipToRef) {
+                VideoTaskStateMachine.validateTransition(task.getStatus(), "reference_analyzing");
+                task.setStatus("reference_analyzing");
+                task.setProgress(25);
+                task.setUpdatedAt(OffsetDateTime.now());
+                videoTaskMapper.updateById(task);
+
+                String refUrl = taskAssetMapper.findByTaskId(taskId).stream()
+                        .filter(a -> "reference_video".equals(a.getAssetRole()))
+                        .map(a -> a.getUrl())
+                        .findFirst().orElse("");
+                Map<String, Object> ctx = creativeContextAssembler.assemble(task);
+                ctx.remove("userRequest");
+                aiServiceClient.startReferenceAnalysis(task.getId(), task.getProductId(), task.getUserId(),
+                        refUrl, ctx);
+                log.info("Skipping asset analysis, starting reference analysis: taskId={}", taskId);
+                return new VideoTaskStatusResponse(taskId, "reference_analyzing", task.getProgress());
+            }
+
             List<TaskAssetEntity> confirmedAssets = taskAssetMapper.findByTaskId(taskId).stream()
                     .filter(asset -> Boolean.TRUE.equals(asset.getConfirmed()))
                     .toList();
@@ -307,6 +330,8 @@ public class TaskAssetServiceImpl implements TaskAssetService {
             videoTaskMapper.updateById(task);
 
             Map<String, Object> productContext = creativeContextAssembler.assemble(task);
+            // Asset analysis should be purely visual — don't pass user intent hints.
+            productContext.remove("userRequest");
             aiServiceClient.startAssetAnalysis(
                     task.getId(),
                     task.getProductId(),
@@ -344,10 +369,57 @@ public class TaskAssetServiceImpl implements TaskAssetService {
         videoTaskMapper.updateById(task);
 
         if ("reference_analyzing".equals(nextStatus)) {
-            aiServiceClient.startReferenceAnalysis(task.getId(), task.getProductId(), task.getUserId(), Map.of());
+            String refUrl = taskAssetMapper.findByTaskId(taskId).stream()
+                    .filter(a -> "reference_video".equals(a.getAssetRole()))
+                    .map(a -> a.getUrl())
+                    .findFirst().orElse("");
+            aiServiceClient.startReferenceAnalysis(task.getId(), task.getProductId(), task.getUserId(),
+                    refUrl, creativeContextAssembler.assemble(task));
         } else if ("plan_generating".equals(nextStatus)) {
             aiServiceClient.startCreativePlanGeneration(
                     task.getId(), task.getProductId(), task.getUserId(), creativeContextAssembler.assemble(task));
+        } else if ("storyboard_generating".equals(nextStatus)) {
+            // CUSTOM_STORYBOARD: create a synthetic plan from user's storyboard text
+            var cs = creativeStateMapper.findByTaskId(taskId).orElse(null);
+            String storyboardText = "";
+            if (cs != null && cs.getUserRequirementsJson() != null) {
+                storyboardText = (String) cs.getUserRequirementsJson().getOrDefault("storyboardText", "");
+            }
+            UUID syntheticPlanId = UUID.randomUUID();
+            Map<String, Object> syntheticPlan = new LinkedHashMap<>();
+            syntheticPlan.put("planId", syntheticPlanId.toString());
+            syntheticPlan.put("type", task.getVideoType());
+            syntheticPlan.put("title", "用户自定义分镜");
+            syntheticPlan.put("hook", storyboardText.length() > 100 ? storyboardText.substring(0, 100) : storyboardText);
+            syntheticPlan.put("structure", "用户分镜结构");
+            syntheticPlan.put("reason", "基于用户提供的分镜结构生成");
+            syntheticPlan.put("estimatedDuration", task.getDuration());
+            syntheticPlan.put("score", 80);
+
+            com.tk.ai.video.module.storyboard.entity.VideoPlanEntity plan = new com.tk.ai.video.module.storyboard.entity.VideoPlanEntity();
+            plan.setId(syntheticPlanId);
+            plan.setTaskId(taskId);
+            plan.setProductId(task.getProductId());
+            plan.setUserId(task.getUserId());
+            plan.setType(task.getVideoType());
+            plan.setTitle("用户自定义分镜");
+            plan.setHook(storyboardText.length() > 200 ? storyboardText.substring(0, 200) : storyboardText);
+            plan.setStructure("用户分镜结构");
+            plan.setReason("基于用户提供的分镜结构生成");
+            plan.setEstimatedDuration(task.getDuration());
+            plan.setScore(80);
+            plan.setRawAiOutput(syntheticPlan);
+            videoPlanMapper.insert(plan);
+
+            task.setSelectedPlanId(syntheticPlanId);
+            task.setVideoType(task.getVideoType());
+            videoTaskMapper.updateById(task);
+
+            aiServiceClient.startStoryboardGeneration(
+                    taskId, task.getProductId(), task.getUserId(),
+                    syntheticPlanId, syntheticPlan,
+                    task.getDuration(), task.getVideoType(),
+                    creativeContextAssembler.assemble(task));
         }
 
         log.info("Assets confirmed: taskId={}, newStatus={}", taskId, nextStatus);
@@ -375,11 +447,18 @@ public class TaskAssetServiceImpl implements TaskAssetService {
     }
 
     private String determineNextStatus(VideoTaskEntity task) {
-        List<TaskAssetEntity> refVideos = taskAssetMapper.findByTaskId(task.getId()).stream()
-                .filter(a -> "reference_video".equals(a.getAssetRole()))
-                .collect(Collectors.toList());
-        if (!refVideos.isEmpty()) {
-            return "reference_analyzing";
+        // REFERENCE_STORYBOARD: analyze reference video first
+        if ("REFERENCE_STORYBOARD".equals(task.getTaskMode())) {
+            List<TaskAssetEntity> refVideos = taskAssetMapper.findByTaskId(task.getId()).stream()
+                    .filter(a -> "reference_video".equals(a.getAssetRole()))
+                    .collect(Collectors.toList());
+            if (!refVideos.isEmpty()) {
+                return "reference_analyzing";
+            }
+        }
+        // CUSTOM_STORYBOARD: skip plan generation, go straight to storyboard
+        if ("CUSTOM_STORYBOARD".equals(task.getTaskMode())) {
+            return "storyboard_generating";
         }
         return "plan_generating";
     }

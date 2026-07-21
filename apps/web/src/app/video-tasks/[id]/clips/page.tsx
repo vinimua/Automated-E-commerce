@@ -3,7 +3,7 @@
 import { CancelTaskButton } from "@/components/cancel-task-button";
 import { apiRequest } from "@/lib/api-client";
 import type { VideoTask } from "@/types/api";
-import { AlertCircle, ArrowLeft, CheckCircle2, Film, Loader2, Play, RefreshCw, XCircle } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCircle2, Film, Loader2, Play, RefreshCw, XCircle, Wand2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -34,6 +34,10 @@ export default function ClipsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [rejectFeedback, setRejectFeedback] = useState<Record<string, string>>({});
+  const [showRejectInput, setShowRejectInput] = useState<Record<string, boolean>>({});
+  const [regeneratePrompt, setRegeneratePrompt] = useState<Record<string, string>>({});
+  const [showRegenerateInput, setShowRegenerateInput] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
     try {
@@ -87,8 +91,15 @@ export default function ClipsPage() {
   }
 
   async function handleRegenerate(clipId: string) {
+    const prompt = regeneratePrompt[clipId] || "";
+    if (!prompt.trim()) return;
     await runAction(`regenerate-${clipId}`, async () => {
-      await apiRequest(`/api/video-tasks/${id}/video-clips/${clipId}/regenerate`, { method: "POST" });
+      await apiRequest(`/api/video-tasks/${id}/video-clips/${clipId}/regenerate`, {
+        method: "POST",
+        body: { feedback: prompt.trim() },
+      });
+      setShowRegenerateInput((prev) => ({ ...prev, [clipId]: false }));
+      setRegeneratePrompt((prev) => { const n = { ...prev }; delete n[clipId]; return n; });
     });
   }
 
@@ -105,11 +116,20 @@ export default function ClipsPage() {
   }
 
   async function handleReject(clipId: string) {
+    const feedback = rejectFeedback[clipId] || "";
     await runAction(`reject-${clipId}`, async () => {
       await apiRequest(`/api/video-tasks/${id}/video-clips/${clipId}/reject`, {
         method: "POST",
-        body: { confirmed: false, feedback: "" },
+        body: { confirmed: false, feedback },
       });
+      setShowRejectInput((prev) => ({ ...prev, [clipId]: false }));
+      setRejectFeedback((prev) => { const n = { ...prev }; delete n[clipId]; return n; });
+    });
+  }
+
+  async function handleUnconfirm(clipId: string) {
+    await runAction(`unconfirm-${clipId}`, async () => {
+      await apiRequest(`/api/video-tasks/${id}/video-clips/${clipId}/unconfirm`, { method: "POST" });
     });
   }
 
@@ -184,15 +204,29 @@ export default function ClipsPage() {
               {hasRetryableClip ? "生成缺失/失败片段" : "生成视频片段"}
             </button>
           )}
-          {allConfirmed && canManage && (
-            <button
-              onClick={handleRender}
-              disabled={Boolean(busyAction)}
-              className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-            >
-              {busyAction === "render" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Film className="h-4 w-4" />}
-              开始渲染成片
-            </button>
+          {canManage && (
+            <div className="flex items-center gap-2">
+              {!allConfirmed && (
+                <button
+                  onClick={handleRender}
+                  disabled={Boolean(busyAction)}
+                  className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+                >
+                  {busyAction === "render" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Film className="h-4 w-4" />}
+                  跳过，直接渲染成片
+                </button>
+              )}
+              {allConfirmed && (
+                <button
+                  onClick={handleRender}
+                  disabled={Boolean(busyAction)}
+                  className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                >
+                  {busyAction === "render" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Film className="h-4 w-4" />}
+                  开始渲染成片
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -267,9 +301,18 @@ export default function ClipsPage() {
               {clip.prompt && <p className="mb-3 line-clamp-2 text-xs text-muted-foreground">Prompt: {clip.prompt}</p>}
 
               {canManage && (
-                <div className="flex items-center gap-2">
+                <div className="space-y-2">
+                  {clip.status === "confirmed" && (
+                    <button
+                      onClick={() => handleUnconfirm(clip.clipId)}
+                      disabled={Boolean(busyAction)}
+                      className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50"
+                    >
+                      <XCircle className="h-3.5 w-3.5" />取消确认
+                    </button>
+                  )}
                   {(clip.status === "uploaded" || clip.status === "generated") && (
-                    <>
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleConfirm(clip.clipId)}
                         disabled={Boolean(busyAction)}
@@ -278,29 +321,61 @@ export default function ClipsPage() {
                         <CheckCircle2 className="h-3.5 w-3.5" />
                         确认
                       </button>
-                      <button
-                        onClick={() => handleReject(clip.clipId)}
-                        disabled={Boolean(busyAction)}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-destructive/50 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/5 disabled:opacity-50"
-                      >
-                        <XCircle className="h-3.5 w-3.5" />
-                        驳回
-                      </button>
-                    </>
+                      {showRejectInput[clip.clipId] ? (
+                        <div className="flex flex-1 items-center gap-2">
+                          <input
+                            type="text"
+                            value={rejectFeedback[clip.clipId] || ""}
+                            onChange={(e) => setRejectFeedback((prev) => ({ ...prev, [clip.clipId]: e.target.value }))}
+                            placeholder="驳回原因 / 修改要求…"
+                            className="flex-1 rounded-md border px-2 py-1.5 text-xs"
+                          />
+                          <button onClick={() => handleReject(clip.clipId)} disabled={Boolean(busyAction)}
+                            className="rounded-md bg-destructive px-2 py-1.5 text-xs font-medium text-white">确认驳回</button>
+                          <button onClick={() => setShowRejectInput((prev) => ({ ...prev, [clip.clipId]: false }))}
+                            className="rounded-md border px-2 py-1.5 text-xs">取消</button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setShowRejectInput((prev) => ({ ...prev, [clip.clipId]: true }))}
+                          disabled={Boolean(busyAction)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-destructive/50 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/5 disabled:opacity-50"
+                        >
+                          <XCircle className="h-3.5 w-3.5" />
+                          驳回
+                        </button>
+                      )}
+                    </div>
                   )}
                   {(clip.status === "rejected" || clip.status === "failed") && (
-                    <button
-                      onClick={() => handleRegenerate(clip.clipId)}
-                      disabled={Boolean(busyAction)}
-                      className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                    >
-                      {busyAction === `regenerate-${clip.clipId}` ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
+                    showRegenerateInput[clip.clipId] ? (
+                      <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+                        <textarea
+                          value={regeneratePrompt[clip.clipId] || clip.prompt || ""}
+                          onChange={(e) => setRegeneratePrompt((prev) => ({ ...prev, [clip.clipId]: e.target.value }))}
+                          placeholder="输入新的生成要求…"
+                          rows={2}
+                          className="w-full rounded-md border bg-background px-2 py-1.5 text-xs"
+                        />
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => setShowRegenerateInput((prev) => ({ ...prev, [clip.clipId]: false }))}
+                            className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent">取消</button>
+                          <button onClick={() => handleRegenerate(clip.clipId)} disabled={Boolean(busyAction)}
+                            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+                            <Wand2 className="h-3.5 w-3.5" />确认重新生成
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setShowRegenerateInput((prev) => ({ ...prev, [clip.clipId]: true }))}
+                        disabled={Boolean(busyAction)}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                      >
                         <RefreshCw className="h-3.5 w-3.5" />
-                      )}
-                      重新生成
-                    </button>
+                        重新生成
+                      </button>
+                    )
                   )}
                 </div>
               )}

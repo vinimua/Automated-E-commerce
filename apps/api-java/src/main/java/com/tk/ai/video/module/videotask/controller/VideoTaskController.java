@@ -86,6 +86,14 @@ public class VideoTaskController {
         return ApiResponse.ok(videoTaskService.confirmStoryboard(taskId, principal.getUserId()));
     }
 
+    @PostMapping("/{taskId}/regenerate-storyboard")
+    public ApiResponse<VideoTaskStatusResponse> regenerateStoryboard(
+            @PathVariable UUID taskId,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        return ApiResponse.ok(videoTaskService.regenerateStoryboard(taskId, principal.getUserId()));
+    }
+
     @PostMapping("/{taskId}/render")
     public ApiResponse<VideoTaskStatusResponse> requestRender(
             @PathVariable UUID taskId,

@@ -50,13 +50,13 @@ public final class VideoTaskStateMachine {
         TRANSITIONS.put("exported", Set.of());
 
         // Fashion Creative Loop V1 transitions
-        TRANSITIONS.put("asset_uploading", Set.of("asset_analyzing", "failed"));
+        TRANSITIONS.put("asset_uploading", Set.of("asset_analyzing", "reference_analyzing", "failed"));
         TRANSITIONS.put("asset_analyzing", Set.of("waiting_asset_confirmation", "failed"));
-        TRANSITIONS.put("waiting_asset_confirmation", Set.of("reference_analyzing", "plan_generating", "failed"));
+        TRANSITIONS.put("waiting_asset_confirmation", Set.of("reference_analyzing", "plan_generating", "storyboard_generating", "failed"));
         TRANSITIONS.put("reference_analyzing", Set.of("plan_generating", "failed"));
         TRANSITIONS.put("plan_generating", Set.of("waiting_plan_selection", "failed"));
         TRANSITIONS.put("storyboard_generating", Set.of("waiting_storyboard_confirmation", "script_generated", "failed"));
-        TRANSITIONS.put("waiting_storyboard_confirmation", Set.of("keyframe_configuring", "failed"));
+        TRANSITIONS.put("waiting_storyboard_confirmation", Set.of("keyframe_configuring", "storyboard_generating", "failed"));
         TRANSITIONS.put("keyframe_configuring", Set.of("image_generating", "waiting_image_confirmation", "failed"));
         TRANSITIONS.put("image_generating", Set.of("waiting_image_confirmation", "failed"));
         TRANSITIONS.put("waiting_image_confirmation", Set.of("image_generating", "video_clip_generating", "failed"));

@@ -40,6 +40,12 @@ interface StoryboardShot {
 
 interface StoryboardData {
   storyboardId: string;
+  title?: string;
+  hook?: string;
+  caption?: string;
+  coverText?: string;
+  hashtags?: string[];
+  musicSuggestion?: string;
   shots?: StoryboardShot[];
 }
 
@@ -53,6 +59,7 @@ export default function KeyframesPage() {
   const [task, setTask] = useState<VideoTask | null>(null);
   const [keyframes, setKeyframes] = useState<KeyframeItem[]>([]);
   const [shots, setShots] = useState<StoryboardShot[]>([]);
+  const [storyboard, setStoryboard] = useState<StoryboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -64,6 +71,7 @@ export default function KeyframesPage() {
   const [genPrompt, setGenPrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [batchGenerating, setBatchGenerating] = useState(false);
+  const [regeneratingKeyframeId, setRegeneratingKeyframeId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -78,7 +86,10 @@ export default function KeyframesPage() {
       ]);
       if (taskRes.code === 0 && taskRes.data) setTask(taskRes.data);
       if (kfRes.code === 0 && kfRes.data) setKeyframes(kfRes.data.keyframes || []);
-      if (sbRes.code === 0 && sbRes.data) setShots(sbRes.data.shots || []);
+      if (sbRes.code === 0 && sbRes.data) {
+        setShots(sbRes.data.shots || []);
+        setStoryboard(sbRes.data);
+      }
     } catch (e: any) {
       setError(e.message || "加载失败");
     } finally {
@@ -136,6 +147,19 @@ export default function KeyframesPage() {
     }
   }
 
+  async function handleUnconfirm(keyframeId: string) {
+    setSubmitting(true);
+    setError("");
+    try {
+      await apiRequest(`/api/video-tasks/${id}/keyframes/${keyframeId}/unconfirm`, { method: "POST" });
+      load();
+    } catch (e: any) {
+      setError(e.message || "取消确认失败");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleConfirm(keyframeId: string) {
     try {
       const res = await apiRequest<{ code: number; message: string; data: { taskId: string; status: string } }>(
@@ -151,6 +175,28 @@ export default function KeyframesPage() {
     } catch (e: any) {
       setError(e.message || "确认失败");
     }
+  }
+
+  async function handleSkipToClips() {
+    // Auto-confirm all generated keyframes before skipping to clips
+    const unconfirmedKfs = keyframes.filter(k => k.status !== "confirmed" && k.status !== "rejected");
+    if (unconfirmedKfs.length > 0) {
+      setError("");
+      try {
+        // Confirm each unconfirmed keyframe
+        for (const kf of unconfirmedKfs) {
+          if (kf.status === "generated" || kf.status === "pending") {
+            await apiRequest(`/api/video-tasks/${id}/keyframes/${kf.keyframeId}/confirm`, {
+              method: "POST", body: { confirmed: true },
+            });
+          }
+        }
+      } catch (e: any) {
+        setError(e.message || "自动确认失败");
+        return;
+      }
+    }
+    router.push(`/video-tasks/${id}/clips`);
   }
 
   async function handleReject(keyframeId: string) {
@@ -178,10 +224,18 @@ export default function KeyframesPage() {
   }
 
   async function handleRegenerate(keyframeId: string) {
+    if (!genPrompt.trim()) return;
     setSubmitting(true);
     setError("");
     try {
-      await apiRequest(`/api/video-tasks/${id}/keyframes/${keyframeId}/regenerate`, { method: "POST" });
+      await apiRequest(`/api/video-tasks/${id}/keyframes/${keyframeId}/regenerate`, {
+        method: "POST",
+        body: { prompt: genPrompt.trim() },
+      });
+      setActiveShot(null);
+      setUploadMode(null);
+      setRegeneratingKeyframeId(null);
+      setGenPrompt("");
       load();
     } catch (e: any) {
       setError(e.message || "重新生成失败");
@@ -222,13 +276,60 @@ export default function KeyframesPage() {
           </p>
         </div>
         <CancelTaskButton taskId={id} />
-        {allConfirmed && canConfigure && (
-          <Link href={`/video-tasks/${id}/clips`}
-            className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700">
-            <CheckCircle2 className="h-4 w-4" />全部已确认，进入片段 →
-          </Link>
+        {canConfigure && (
+          <div className="flex items-center gap-2">
+            {!allConfirmed && (
+              <button onClick={handleSkipToClips}
+                className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent">
+                自动确认并进入视频片段 →
+              </button>
+            )}
+            {allConfirmed && (
+              <Link href={`/video-tasks/${id}/clips`}
+                className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700">
+                <CheckCircle2 className="h-4 w-4" />全部已确认，进入片段 →
+              </Link>
+            )}
+          </div>
         )}
       </div>
+
+      {/* ── Storyboard overview ── */}
+      {storyboard && (storyboard.title || storyboard.hook) && (
+        <div className="rounded-lg border bg-card p-6 space-y-3">
+          <h2 className="text-lg font-semibold">分镜脚本</h2>
+          {storyboard.title && (
+            <div>
+              <span className="text-xs text-muted-foreground">标题</span>
+              <p className="text-base font-medium">{storyboard.title}</p>
+            </div>
+          )}
+          {storyboard.hook && (
+            <div>
+              <span className="text-xs text-muted-foreground">开场钩子</span>
+              <p className="text-sm">{storyboard.hook}</p>
+            </div>
+          )}
+          {storyboard.caption && (
+            <div>
+              <span className="text-xs text-muted-foreground">视频文案</span>
+              <p className="text-sm text-muted-foreground">{storyboard.caption}</p>
+            </div>
+          )}
+          {storyboard.musicSuggestion && (
+            <div>
+              <span className="text-xs text-muted-foreground">音乐建议</span>
+              <p className="text-sm">{storyboard.musicSuggestion}</p>
+            </div>
+          )}
+          {storyboard.hashtags && storyboard.hashtags.length > 0 && (
+            <div>
+              <span className="text-xs text-muted-foreground">标签</span>
+              <p className="text-sm">{storyboard.hashtags.join("  ")}</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Batch generate banner */}
       {canConfigure && unconfiguredShots.length > 0 && (
@@ -275,10 +376,13 @@ export default function KeyframesPage() {
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
-                      镜头 {shotNo} · {shot.duration}s
+                      镜头 {shotNo} · {shot.duration}s · {shot.materialType || "ai_video"}
                     </span>
                     <p className="mt-1 text-sm font-medium">{shot.scene}</p>
-                    <p className="text-xs text-muted-foreground">{shot.subtitle}</p>
+                    {shot.action && <p className="text-xs text-muted-foreground">动作: {shot.action}</p>}
+                    {shot.subtitle && <p className="text-xs text-muted-foreground">字幕: {shot.subtitle}</p>}
+                    {shot.prompt && <p className="mt-1 text-xs text-muted-foreground/70 italic break-all">AI 提示词: {shot.prompt}</p>}
+                    {shot.editInstruction && <p className="text-xs text-amber-600">编辑建议: {shot.editInstruction}</p>}
                   </div>
                   <div className="flex items-center gap-2">
                     {kf?.status === "confirmed" ? (
@@ -332,7 +436,12 @@ export default function KeyframesPage() {
                           <Wand2 className="h-3.5 w-3.5" />AI 生成
                         </button>
                         {(kf?.status === "rejected" || kf?.status === "failed") && (
-                          <button onClick={() => handleRegenerate(kf.keyframeId)}
+                          <button onClick={() => {
+                            setActiveShot(shotNo);
+                            setUploadMode("generate");
+                            setRegeneratingKeyframeId(kf.keyframeId);
+                            setGenPrompt(kf.prompt || shot.prompt || `Fashion keyframe: ${shot.scene}, ${shot.subtitle}`);
+                          }}
                             className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/50 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100">
                             <Wand2 className="h-3.5 w-3.5" />重新生成
                           </button>
@@ -349,6 +458,11 @@ export default function KeyframesPage() {
                           <XCircle className="h-3.5 w-3.5" />驳回
                         </button>
                       </>
+                    ) : kf.status === "confirmed" ? (
+                      <button onClick={() => handleUnconfirm(kf.keyframeId)}
+                        className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent">
+                        <XCircle className="h-3.5 w-3.5" />取消确认
+                      </button>
                     ) : null}
                   </div>
                 )}
@@ -380,7 +494,7 @@ export default function KeyframesPage() {
                           placeholder="https://cos.example.com/keyframe.jpg"
                           className="w-full rounded-md border px-3 py-2 text-sm" />
                         <div className="flex justify-end gap-2">
-                          <button onClick={() => { setActiveShot(null); setUploadMode(null); }}
+                          <button onClick={() => { setActiveShot(null); setUploadMode(null); setRegeneratingKeyframeId(null); }}
                             className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent">取消</button>
                           <button onClick={() => handleUpload(shotNo)} disabled={submitting || !uploadUrl.trim()}
                             className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
@@ -394,12 +508,14 @@ export default function KeyframesPage() {
                           rows={3} placeholder="描述你想要的关键帧画面…"
                           className="w-full rounded-md border px-3 py-2 text-sm" />
                         <div className="flex justify-end gap-2">
-                          <button onClick={() => { setActiveShot(null); setUploadMode(null); }}
+                          <button onClick={() => { setActiveShot(null); setUploadMode(null); setRegeneratingKeyframeId(null); }}
                             className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent">取消</button>
-                          <button onClick={() => handleRequestAI(shotNo)} disabled={submitting || !genPrompt.trim()}
+                          <button
+                            onClick={() => regeneratingKeyframeId ? handleRegenerate(regeneratingKeyframeId) : handleRequestAI(shotNo)}
+                            disabled={submitting || !genPrompt.trim()}
                             className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
                             <Wand2 className="mr-1 inline h-3.5 w-3.5" />
-                            {submitting ? "请求中..." : "请求 AI 生成"}
+                            {submitting ? "请求中..." : regeneratingKeyframeId ? "确认重新生成" : "请求 AI 生成"}
                           </button>
                         </div>
                       </>

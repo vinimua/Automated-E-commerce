@@ -1,6 +1,6 @@
 "use client";
 
-import { apiRequest } from "@/lib/api-client";
+import { apiRequest, uploadFile } from "@/lib/api-client";
 import type { VideoTask, TaskMode, TaskAsset, TaskAssetListResponse, FashionAssetAnalysis } from "@/types/api";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -76,6 +76,7 @@ export default function AssetsPage() {
   const [imagePrompt, setImagePrompt] = useState("");
   const [generatingImage, setGeneratingImage] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [skipAssetAnalysis, setSkipAssetAnalysis] = useState(false);
 
   // Upload form
   const [showUpload, setShowUpload] = useState(false);
@@ -83,6 +84,35 @@ export default function AssetsPage() {
   const [uploadRole, setUploadRole] = useState("product_front");
   const [uploadUrl, setUploadUrl] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [uploadingFileName, setUploadingFileName] = useState("");
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadingFileName(file.name);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder", uploadKind === "video" ? "reference-videos" : "product-images");
+      const res = await uploadFile<{ code: number; message: string; data: { fileUrl: string } }>(
+        "/api/storage/upload", formData
+      );
+      if (res.code === 0 && res.data?.fileUrl) {
+        setUploadUrl(res.data.fileUrl);
+        if (uploadKind === "video" && uploadRole !== "reference_video") {
+          setUploadRole("reference_video");
+        }
+      } else {
+        setError("上传失败: " + (res.message || "未知错误"));
+      }
+    } catch (e: any) {
+      setError("上传失败: " + (e.message || "网络错误"));
+    } finally {
+      setUploading(false);
+      setUploadingFileName("");
+    }
+  }
 
   // Edit role
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -179,8 +209,10 @@ export default function AssetsPage() {
   const canDelete = task && ["asset_uploading", "waiting_asset_confirmation"].includes(task.status);
   const canStartAssetFlow = task?.status === "asset_uploading" || task?.status === "waiting_asset_confirmation";
   const canConfirm =
-    canStartAssetFlow &&
-    productImageCount >= modeConfig.minProductImages;
+    canStartAssetFlow && (
+      skipAssetAnalysis ||
+      productImageCount >= modeConfig.minProductImages
+    );
   const isAnalyzing = task?.status === "asset_analyzing";
   const assetAnalysis = task?.assetAnalysis as FashionAssetAnalysis | null | undefined;
   const isReadOnly = !!(task && !canUpload && !isAnalyzing);
@@ -254,26 +286,7 @@ export default function AssetsPage() {
     }
   }
 
-  async function handleRegenerateImage(asset: TaskAsset, feedback: string) {
-    if (!feedback.trim()) return;
-    setError("");
-    try {
-      const res = await apiRequest<{ code: number; message: string; data: { taskId: string; assets: TaskAsset[] } }>(
-        `/api/video-tasks/${id}/assets/${asset.assetId}/regenerate-image`,
-        {
-          method: "POST",
-          body: { feedback: feedback.trim() },
-        }
-      );
-      if (res.code === 0 && res.data) {
-        setAssets(res.data.assets || []);
-      } else {
-        setError(res.message || "重新生成失败");
-      }
-    } catch (e: any) {
-      setError(e.message || "重新生成失败");
-    }
-  }
+  // handleRegenerateImage removed — backend endpoint preserved, UI hidden
 
   async function handleUpdateRole(assetId: string, newRole: string) {
     try {
@@ -299,7 +312,7 @@ export default function AssetsPage() {
   }
 
   async function handleConfirm() {
-    if (productImageCount < modeConfig.minProductImages) {
+    if (!skipAssetAnalysis && productImageCount < modeConfig.minProductImages) {
       setError(`请至少上传 ${modeConfig.minProductImages} 张商品图片后再确认`);
       return;
     }
@@ -320,6 +333,7 @@ export default function AssetsPage() {
       const body: Record<string, unknown> = {};
       if (confirmAssetIds) body.assetIds = confirmAssetIds;
       if (creativePrompt.trim()) body.creativePrompt = creativePrompt.trim();
+      if (skipAssetAnalysis) body.skipAssetAnalysis = true;
 
       const res = await apiRequest<{ code: number; message: string; data?: { status?: string } }>(
         `/api/video-tasks/${id}/assets/confirm`,
@@ -377,15 +391,28 @@ export default function AssetsPage() {
             </button>
           )}
           {canStartAssetFlow && (
-            <button
-              onClick={handleConfirm}
-              disabled={confirming || !canConfirm}
-              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              title={!canConfirm ? `请至少上传 ${modeConfig.minProductImages} 张用途为商品正面、商品背面或商品细节的图片` : undefined}
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              {confirming ? "确认中..." : confirmButtonText}
-            </button>
+            <div className="flex items-center gap-3">
+              {task?.taskMode === "REFERENCE_STORYBOARD" && task?.status === "asset_uploading" && (
+                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={skipAssetAnalysis}
+                    onChange={(e) => setSkipAssetAnalysis(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-muted-foreground"
+                  />
+                  跳过素材分析，直接分析视频
+                </label>
+              )}
+              <button
+                onClick={handleConfirm}
+                disabled={confirming || !canConfirm}
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                title={!canConfirm && !skipAssetAnalysis ? `请至少上传 ${modeConfig.minProductImages} 张用途为商品正面、商品背面或商品细节的图片` : undefined}
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                {confirming ? "确认中..." : confirmButtonText}
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -474,37 +501,6 @@ export default function AssetsPage() {
         </div>
       )}
 
-      {canUpload && (
-        <div className="rounded-lg border bg-card p-6 space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold">生成/编辑新商品图</h2>
-            <p className="text-sm text-muted-foreground">
-              先基于当前素材生成一张新图。生成结果会作为未确认素材加入下方列表，确认后才会进入 AI 素材分析。
-            </p>
-          </div>
-          <textarea
-            value={imagePrompt}
-            onChange={(e) => setImagePrompt(e.target.value)}
-            placeholder="例如：在原有黑色 T 恤背面加一个大面积蝴蝶图案，保持版型、主色和正面小图案不变。"
-            rows={3}
-            className="w-full rounded-md border px-3 py-2 text-sm placeholder:text-muted-foreground/50 resize-vertical"
-          />
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs text-muted-foreground">
-              将参考当前 {sourceImageAssets.length} 张图片素材生成新图。
-            </p>
-            <button
-              onClick={handleGenerateImage}
-              disabled={generatingImage || !imagePrompt.trim() || sourceImageAssets.length === 0}
-              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              {generatingImage && <Loader2 className="h-4 w-4 animate-spin" />}
-              {generatingImage ? "生成中..." : "生成/编辑新图"}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Empty state */}
       {assets.length === 0 && !isAnalyzing && (
         <div className="rounded-lg border bg-card p-12 text-center">
@@ -533,9 +529,57 @@ export default function AssetsPage() {
                 onUpdateRole={handleUpdateRole}
                 onDelete={handleDelete}
                 onPreview={setPreviewUrl}
-                onRegenerate={handleRegenerateImage}
               />
             ))}
+          </div>
+        </div>
+      )}
+
+      {canUpload && (
+        <div className="rounded-lg border bg-card p-6 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold">生成/编辑新商品图</h2>
+            <p className="text-sm text-muted-foreground">
+              先基于当前素材生成一张新图。生成结果会作为未确认素材加入下方列表，确认后才会进入 AI 素材分析。
+            </p>
+          </div>
+          <textarea
+            value={imagePrompt}
+            onChange={(e) => setImagePrompt(e.target.value)}
+            placeholder="描述你想对当前素材做什么修改，例如：在背面加蝴蝶图案、把短袖改成长袖、换一种面料质感…"
+            rows={3}
+            className="w-full rounded-md border px-3 py-2 text-sm placeholder:text-muted-foreground/50 resize-vertical"
+          />
+          <div className="flex flex-wrap gap-2">
+            <span className="text-xs text-muted-foreground self-center">快捷指令：</span>
+            {[
+              { label: "换正面图案", prompt: "把当前商品正面的图案替换成参考图里的印花/logo/刺绣，保持版型、颜色和面料不变。" },
+              { label: "换背面图案", prompt: "在商品背面加上参考图中的大面积图案，正面保持原样。" },
+              { label: "去背景", prompt: "把商品从当前背景中抠出来，放在纯白色背景上，保留商品所有细节。" },
+              { label: "改颜色", prompt: "保持版型和图案不变，把商品主色改成黑色。如果有参考图中的颜色方案，优先使用。" },
+            ].map((tpl) => (
+              <button
+                key={tpl.label}
+                type="button"
+                onClick={() => setImagePrompt(tpl.prompt)}
+                className="rounded-full border px-2.5 py-0.5 text-xs hover:bg-accent hover:border-primary/50 transition-colors"
+              >
+                {tpl.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground">
+              将参考当前 {sourceImageAssets.length} 张图片素材生成新图。
+            </p>
+            <button
+              onClick={handleGenerateImage}
+              disabled={generatingImage || !imagePrompt.trim() || sourceImageAssets.length === 0}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {generatingImage && <Loader2 className="h-4 w-4 animate-spin" />}
+              {generatingImage ? "生成中..." : "生成/编辑新图"}
+            </button>
           </div>
         </div>
       )}
@@ -573,11 +617,18 @@ export default function AssetsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium">COS URL</label>
-                  <input type="text" value={uploadUrl} onChange={(e) => setUploadUrl(e.target.value)}
-                    placeholder="https://cos.example.com/..."
-                    className="mt-1 w-full rounded-md border px-3 py-2 text-sm" />
+                  <label className="text-sm font-medium">上传文件</label>
+                  <input type="file" accept={uploadKind === "video" ? "video/*" : "image/*"}
+                    onChange={handleFileUpload} disabled={uploading}
+                    className="mt-1 w-full text-sm file:mr-2 file:rounded file:border-0 file:bg-primary file:px-2 file:py-1 file:text-xs file:text-primary-foreground" />
+                  {uploadingFileName && <p className="mt-1 text-xs text-primary">上传中: {uploadingFileName}...</p>}
                 </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium">或直接输入 URL</label>
+                <input type="text" value={uploadUrl} onChange={(e) => setUploadUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="mt-1 w-full rounded-md border px-3 py-2 text-sm" />
               </div>
               <div className="flex justify-end gap-3">
                 <button onClick={() => setShowUpload(false)}
@@ -604,7 +655,6 @@ export default function AssetsPage() {
                   onUpdateRole={handleUpdateRole}
                   onDelete={handleDelete}
                   onPreview={setPreviewUrl}
-                  onRegenerate={handleRegenerateImage}
                 />
               ))}
             </div>
@@ -696,7 +746,6 @@ function AssetCard({
   onUpdateRole,
   onDelete,
   onPreview,
-  onRegenerate,
 }: {
   asset: TaskAsset;
   isReadOnly: boolean;
@@ -706,23 +755,8 @@ function AssetCard({
   onUpdateRole: (assetId: string, newRole: string) => void;
   onDelete: (assetId: string) => void;
   onPreview?: (url: string) => void;
-  onRegenerate?: (asset: TaskAsset, feedback: string) => Promise<void>;
+  // onRegenerate removed — backend preserved, UI hidden
 }) {
-  const [feedback, setFeedback] = useState("");
-  const [regenerating, setRegenerating] = useState(false);
-  const canRegenerate = !isReadOnly && isGeneratedImageAsset(asset) && !!onRegenerate;
-
-  async function submitRegeneration() {
-    if (!feedback.trim() || !onRegenerate) return;
-    setRegenerating(true);
-    try {
-      await onRegenerate(asset, feedback.trim());
-      setFeedback("");
-    } finally {
-      setRegenerating(false);
-    }
-  }
-
   return (
     <div className={`rounded-lg border bg-card p-4 ${asset.confirmed ? "border-green-500/50" : ""}`}>
       <div className="flex items-start justify-between mb-3">
@@ -771,26 +805,7 @@ function AssetCard({
       />
       <p className="text-xs text-muted-foreground truncate">{asset.url}</p>
       {asset.fileName && <p className="text-xs text-muted-foreground">{asset.fileName}</p>}
-      {canRegenerate && (
-        <div className="mt-3 space-y-2 rounded-md border bg-muted/30 p-3">
-          <label className="text-xs font-medium">不满意？告诉 AI 这张图要怎么改</label>
-          <textarea
-            value={feedback}
-            onChange={(e) => setFeedback(e.target.value)}
-            placeholder="例如：图案再小一点，放到胸前左侧；衣服版型和颜色不要变"
-            rows={2}
-            className="w-full rounded-md border bg-background px-2 py-1.5 text-xs"
-          />
-          <button
-            onClick={submitRegeneration}
-            disabled={regenerating || !feedback.trim()}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {regenerating && <Loader2 className="h-3 w-3 animate-spin" />}
-            {regenerating ? "重新生成中..." : "按反馈重新生成"}
-          </button>
-        </div>
-      )}
+      {/* "按反馈重新生成" UI removed — backend endpoint preserved for future use */}
     </div>
   );
 }

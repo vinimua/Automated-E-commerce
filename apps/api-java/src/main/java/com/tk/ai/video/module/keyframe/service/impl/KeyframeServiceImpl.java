@@ -272,7 +272,7 @@ public class KeyframeServiceImpl implements KeyframeService {
 
     @Override
     @Transactional
-    public List<KeyframeResponse> regenerateKeyframe(UUID taskId, UUID keyframeId, UUID userId) {
+    public List<KeyframeResponse> regenerateKeyframe(UUID taskId, UUID keyframeId, String prompt, UUID userId) {
         VideoTaskEntity task = findTask(taskId);
         checkOwnership(task, userId);
 
@@ -295,6 +295,10 @@ public class KeyframeServiceImpl implements KeyframeService {
         // Reset keyframe to generating
         keyframe.setStatus("generating");
         keyframe.setErrorMessage(null);
+        if (prompt != null && !prompt.isBlank()) {
+            keyframe.setPrompt(prompt.trim());
+            keyframe.setUserInstruction("用户重新生成要求: " + prompt.trim());
+        }
         keyframe.setUpdatedAt(OffsetDateTime.now());
         keyframeMapper.updateById(keyframe);
 
@@ -310,9 +314,44 @@ public class KeyframeServiceImpl implements KeyframeService {
         // Trigger AI workflow for this single shot
         StoryboardContext storyboardContext = loadStoryboardContext(task);
         Map<String, Object> storyboardMap = buildStoryboardPayload(storyboardContext, Set.of(keyframe.getShotNo()));
+        if (prompt != null && !prompt.isBlank() && storyboardMap.get("shots") instanceof List<?> shots) {
+            for (Object s : shots) {
+                if (s instanceof Map<?, ?> shotMap) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> sm = (Map<String, Object>) shotMap;
+                    sm.put("prompt", prompt.trim());
+                }
+            }
+        }
         aiServiceClient.startKeyframeGeneration(taskId, task.getProductId(), userId, storyboardMap);
 
         log.info("Keyframe regeneration triggered: taskId={}, keyframeId={}, shotNo={}", taskId, keyframeId, keyframe.getShotNo());
+        return getKeyframes(taskId, userId);
+    }
+
+    @Override
+    @Transactional
+    public List<KeyframeResponse> unconfirmKeyframe(UUID taskId, UUID keyframeId, UUID userId) {
+        VideoTaskEntity task = findTask(taskId);
+        checkOwnership(task, userId);
+
+        if (!"waiting_image_confirmation".equals(task.getStatus())
+                && !"keyframe_configuring".equals(task.getStatus())) {
+            throw new BusinessException("Cannot unconfirm keyframes when task status is " + task.getStatus());
+        }
+
+        KeyframeEntity keyframe = keyframeMapper.findByIdAndTaskId(keyframeId, taskId)
+                .orElseThrow(() -> new ResourceNotFoundException("Keyframe", keyframeId));
+
+        if (!"confirmed".equals(keyframe.getStatus())) {
+            throw new BusinessException("Only confirmed keyframes can be unconfirmed, current: " + keyframe.getStatus());
+        }
+
+        keyframe.setStatus("generated");
+        keyframe.setUpdatedAt(OffsetDateTime.now());
+        keyframeMapper.updateById(keyframe);
+
+        log.info("Keyframe unconfirmed: taskId={}, keyframeId={}, shotNo={}", taskId, keyframeId, keyframe.getShotNo());
         return getKeyframes(taskId, userId);
     }
 
