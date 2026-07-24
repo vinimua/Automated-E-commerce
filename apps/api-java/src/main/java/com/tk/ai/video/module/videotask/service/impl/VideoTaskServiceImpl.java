@@ -502,6 +502,9 @@ public class VideoTaskServiceImpl implements VideoTaskService {
             throw new BusinessException("Storyboard raw AI output is empty");
         }
 
+        // Inject task asset images so keyframe generation can use them as img2img reference
+        injectAssetsIntoStoryboard(storyboardMap, taskId);
+
         VideoTaskStateMachine.validateTransition(task.getStatus(), "keyframe_configuring");
 
         task.setStatus("keyframe_configuring");
@@ -514,6 +517,45 @@ public class VideoTaskServiceImpl implements VideoTaskService {
 
         log.info("Storyboard confirmed, advancing to keyframe configuration: taskId={}", taskId);
         return new VideoTaskStatusResponse(taskId, "keyframe_configuring", 50);
+    }
+
+    /**
+     * Inject task asset images into the storyboard payload so keyframe generation
+     * can use them as img2img reference. AI-generated variants come first, then
+     * product images, then other image assets — each group sorted newest first.
+     */
+    private void injectAssetsIntoStoryboard(Map<String, Object> storyboardMap, UUID taskId) {
+        List<Map<String, Object>> assets = taskAssetMapper.findByTaskId(taskId).stream()
+                .filter(a -> "image".equals(a.getAssetKind()) && a.getUrl() != null && !a.getUrl().isBlank())
+                .sorted((a, b) -> {
+                    int aPrio = assetPriority(a), bPrio = assetPriority(b);
+                    if (aPrio != bPrio) return Integer.compare(aPrio, bPrio);
+                    return b.getCreatedAt().compareTo(a.getCreatedAt());
+                })
+                .map(a -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("assetId", a.getId().toString());
+                    item.put("url", a.getUrl());
+                    item.put("assetRole", a.getAssetRole());
+                    item.put("source", a.getSource());
+                    if (a.getDescription() != null) item.put("description", a.getDescription());
+                    return item;
+                })
+                .collect(java.util.stream.Collectors.toList());
+
+        if (!assets.isEmpty()) {
+            storyboardMap.put("assets", assets);
+            log.info("Injected {} asset images into storyboard payload for task {}", assets.size(), taskId);
+        } else {
+            log.info("No asset images to inject for task {}", taskId);
+        }
+    }
+
+    /** Lower number = higher priority. ai_generated variants first, then product images. */
+    private static int assetPriority(com.tk.ai.video.module.taskasset.entity.TaskAssetEntity a) {
+        if ("ai_generated".equals(a.getSource())) return 0;
+        if (a.getAssetRole() != null && a.getAssetRole().startsWith("product_")) return 1;
+        return 2;
     }
 
     @Override
@@ -1014,6 +1056,7 @@ public class VideoTaskServiceImpl implements VideoTaskService {
             if (storyboardMap == null || storyboardMap.isEmpty()) {
                 throw new BusinessException("Storyboard raw AI output is empty, cannot retry image generation");
             }
+            injectAssetsIntoStoryboard(storyboardMap, task.getId());
             aiServiceClient.startKeyframeGeneration(task.getId(), product.getId(), userId, storyboardMap);
             return;
         }

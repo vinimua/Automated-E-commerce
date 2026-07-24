@@ -3,8 +3,8 @@
 import { apiRequest } from "@/lib/api-client";
 import type { VideoTask } from "@/types/api";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState, useCallback } from "react";
 import { ArrowLeft, Clock, Camera, Film } from "lucide-react";
 
 interface CreativeStateData {
@@ -35,30 +35,41 @@ interface ReferenceShot {
 
 export default function ReferenceAnalysisPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [task, setTask] = useState<VideoTask | null>(null);
   const [creativeState, setCreativeState] = useState<CreativeStateData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const [taskRes, csRes] = await Promise.all([
-          apiRequest<{ code: number; message: string; data: VideoTask }>(`/api/video-tasks/${id}`),
-          apiRequest<{ code: number; message: string; data: CreativeStateData }>(
-            `/api/video-tasks/${id}/creative-state`
-          ),
-        ]);
-        if (taskRes.code === 0 && taskRes.data) setTask(taskRes.data);
-        if (csRes.code === 0 && csRes.data) setCreativeState(csRes.data);
-      } catch (e: any) {
-        setError(e.message || "加载失败");
-      } finally {
-        setLoading(false);
-      }
+  const load = useCallback(async () => {
+    try {
+      const [taskRes, csRes] = await Promise.all([
+        apiRequest<{ code: number; message: string; data: VideoTask }>(`/api/video-tasks/${id}`),
+        apiRequest<{ code: number; message: string; data: CreativeStateData }>(
+          `/api/video-tasks/${id}/creative-state`
+        ),
+      ]);
+      if (taskRes.code === 0 && taskRes.data) setTask(taskRes.data);
+      if (csRes.code === 0 && csRes.data) setCreativeState(csRes.data);
+    } catch (e: any) {
+      setError(e.message || "加载失败");
+    } finally {
+      setLoading(false);
     }
-    load();
   }, [id]);
+
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 5000);
+    return () => clearInterval(interval);
+  }, [load]);
+
+  // Auto-redirect when plans are ready
+  useEffect(() => {
+    if (task && ["plan_generating", "waiting_plan_selection", "storyboard_generating", "waiting_storyboard_confirmation"].includes(task.status)) {
+      router.push(`/video-tasks/${id}/plans`);
+    }
+  }, [task, id, router]);
 
   if (loading) {
     return (

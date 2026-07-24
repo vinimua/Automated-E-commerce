@@ -33,7 +33,7 @@ class FashionVideoClipWorkflow:
             prompts = await workflow.execute_activity(
                 "generate_video_clip_prompts",
                 args=[task_id, storyboard, keyframes],
-                start_to_close_timeout=timedelta(seconds=30),
+                start_to_close_timeout=timedelta(minutes=2),
                 retry_policy=retry,
             )
         except Exception as e:
@@ -49,7 +49,7 @@ class FashionVideoClipWorkflow:
         try:
             clips_result = await workflow.execute_activity(
                 "fake_generate_video_clips",
-                args=[task_id, prompts, storyboard],
+                args=[task_id, prompts, storyboard, keyframes],
                 start_to_close_timeout=timedelta(minutes=10),
                 retry_policy=retry,
             )

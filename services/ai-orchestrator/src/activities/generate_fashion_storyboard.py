@@ -77,7 +77,7 @@ CUSTOM_STORYBOARD：保留用户指定的镜头顺序和关键动作，只能补
 - 开场镜头直接兑现 hook
 - 商品不能只在最后才出现
 
-目标总时长 {duration} 秒。每个镜头 duration 为 1-8 秒整数，所有镜头 duration 之和必须等于 {duration}。shotNo 从 1 连续递增。如果时长约束与镜头数冲突，优先保证单镜头时长合法和镜头数量在 4-8 范围内。
+目标总时长 {duration} 秒。每个镜头 duration 必须为整数（1, 2, 3, 4, 5, 6, 7, 8），不得超过 8，不得为小数。所有镜头 duration 之和必须等于 {duration}。shotNo 从 1 连续递增。如果时长约束与镜头数冲突，优先保证单镜头时长合法和镜头数量在 4-8 范围内。
 
 ━━━━━━━━
 五、materialType 选择
@@ -155,6 +155,11 @@ editInstruction：中文。说明素材入出方式、裁剪/缩放/平移、字
             await call_llm("fashion_storyboard", system_prompt, user_prompt),
             StoryboardResult,
         ).model_dump()
+
+        # Round fractional durations to ints (DeepSeek sometimes outputs 2.5 etc.)
+        for shot in result.get("shots", []):
+            if isinstance(shot.get("duration"), float):
+                shot["duration"] = round(shot["duration"])
 
     activity.logger.info("Fashion storyboard generated: shots=%d", len(result.get("shots", [])))
     return result

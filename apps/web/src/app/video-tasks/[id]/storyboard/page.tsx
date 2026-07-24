@@ -28,16 +28,18 @@ export default function StoryboardPage() {
   const [hashtagsStr, setHashtagsStr] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
       try {
         const [sbRes, taskRes] = await Promise.all([
           apiRequest<{ code: number; message: string; data: Storyboard }>(
             `/api/video-tasks/${id}/storyboard`
-          ),
+          ).catch((e) => ({ code: -1, message: e.message, data: null as unknown as Storyboard })),
           apiRequest<{ code: number; message: string; data: VideoTask }>(
             `/api/video-tasks/${id}`
-          ),
+          ).catch((e) => ({ code: -1, message: e.message, data: null as unknown as VideoTask })),
         ]);
+        if (cancelled) return;
         if (sbRes.code === 0 && sbRes.data) {
           setStoryboard(sbRes.data);
           setTitle(sbRes.data.title || "");
@@ -45,20 +47,27 @@ export default function StoryboardPage() {
           setCoverText(sbRes.data.coverText || "");
           setCaption(sbRes.data.caption || "");
           setHashtagsStr((sbRes.data.hashtags || []).join(", "));
-        } else {
-          setError(sbRes.message || "加载分镜失败");
         }
         if (taskRes.code === 0 && taskRes.data) {
           setTaskStatus(taskRes.data.status);
         }
       } catch (e: any) {
-        setError(e.message || "网络错误");
+        if (!cancelled) setError(e.message || "网络错误");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
     load();
+    const interval = setInterval(load, 5000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [id]);
+
+  // Auto-redirect when storyboard is ready
+  useEffect(() => {
+    if (storyboard && taskStatus === "waiting_storyboard_confirmation") {
+      // storyboard loaded, stay on page
+    }
+  }, [storyboard, taskStatus, id, router]);
 
   async function handleSave() {
     if (!storyboard) return;
@@ -149,22 +158,42 @@ export default function StoryboardPage() {
   if (!storyboard) {
     return (
       <div className="p-8">
-        {taskStatus === "storyboard_generating" ? (
+        <div className="flex items-center justify-between mb-6">
+          <Link href={`/video-tasks/${id}/progress`} className="text-sm text-muted-foreground hover:text-foreground">
+            ← 返回进度
+          </Link>
+          <CancelTaskButton taskId={id} />
+        </div>
+        {error && (
+          <div className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+        )}
+        {(!taskStatus || taskStatus === "storyboard_generating") ? (
           <div className="flex flex-col items-center gap-4 py-16">
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-            <p className="font-medium">AI 正在重新生成分镜...</p>
-            <p className="text-sm text-muted-foreground">预计需要 30-60 秒，请稍后刷新</p>
-            <Link href={`/video-tasks/${id}/progress`} className="text-sm text-primary hover:underline">
-              ← 返回进度页
-            </Link>
+            <p className="font-medium">AI 正在生成分镜...</p>
+            <p className="text-sm text-muted-foreground">预计需要 30-60 秒，页面会自动刷新</p>
           </div>
         ) : (
-          <>
-            <p className="text-destructive">分镜数据不存在 — 可能 AI 尚未生成</p>
-            <Link href={`/video-tasks/${id}/progress`} className="mt-2 inline-block text-sm text-primary hover:underline">
-              ← 返回进度页
-            </Link>
-          </>
+          <div className="flex flex-col items-center gap-4 py-16">
+            <p className="text-destructive text-lg font-medium">分镜数据不存在</p>
+            <p className="text-sm text-muted-foreground">
+              当前任务状态: {taskStatus || "未知"}
+            </p>
+            <div className="flex gap-4">
+              <button
+                onClick={() => window.location.reload()}
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                刷新重试
+              </button>
+              <Link
+                href={`/video-tasks/${id}/progress`}
+                className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent"
+              >
+                返回进度页
+              </Link>
+            </div>
+          </div>
         )}
       </div>
     );

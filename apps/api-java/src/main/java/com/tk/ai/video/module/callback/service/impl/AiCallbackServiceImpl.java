@@ -55,6 +55,7 @@ public class AiCallbackServiceImpl implements AiCallbackService {
     private final AiServiceClient aiServiceClient;
     private final com.tk.ai.video.module.video.mapper.VideoMapper videoMapper;
     private final com.tk.ai.video.common.CreativeContextAssembler creativeContextAssembler;
+    private final com.tk.ai.video.module.taskasset.mapper.TaskAssetMapper taskAssetMapper;
 
     @Override
     @Transactional
@@ -594,6 +595,7 @@ public class AiCallbackServiceImpl implements AiCallbackService {
 
         Map<String, Object> storyboardPayload = buildStoryboardPayload(storyboard, shotsByNo.values().stream().toList(), affectedShotNos);
         storyboardPayload.put("repairContext", repairResult);
+        injectTaskAssets(storyboardPayload, task.getId());
         aiServiceClient.startKeyframeGeneration(task.getId(), task.getProductId(), task.getUserId(), storyboardPayload);
         log.info("Repair dispatched to keyframe generation: taskId={}, version={}, affectedShots={}",
                 task.getId(), nextVersion, affectedShotNos);
@@ -896,6 +898,37 @@ public class AiCallbackServiceImpl implements AiCallbackService {
             payload.put("targetShotNos", targetShotNos.stream().sorted().collect(Collectors.toList()));
         }
         return payload;
+    }
+
+    private void injectTaskAssets(Map<String, Object> storyboardPayload, UUID taskId) {
+        List<Map<String, Object>> assets = taskAssetMapper.findByTaskId(taskId).stream()
+                .filter(a -> "image".equals(a.getAssetKind()) && a.getUrl() != null && !a.getUrl().isBlank())
+                .sorted((a, b) -> {
+                    int aPrio = assetPriority(a), bPrio = assetPriority(b);
+                    if (aPrio != bPrio) return Integer.compare(aPrio, bPrio);
+                    return b.getCreatedAt().compareTo(a.getCreatedAt());
+                })
+                .map(a -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("assetId", a.getId().toString());
+                    item.put("url", a.getUrl());
+                    item.put("assetRole", a.getAssetRole());
+                    item.put("source", a.getSource());
+                    if (a.getDescription() != null) item.put("description", a.getDescription());
+                    return item;
+                })
+                .collect(Collectors.toList());
+
+        if (!assets.isEmpty()) {
+            storyboardPayload.put("assets", assets);
+            log.info("Injected {} asset images into storyboard payload for repair task {}", assets.size(), taskId);
+        }
+    }
+
+    private static int assetPriority(com.tk.ai.video.module.taskasset.entity.TaskAssetEntity a) {
+        if ("ai_generated".equals(a.getSource())) return 0;
+        if (a.getAssetRole() != null && a.getAssetRole().startsWith("product_")) return 1;
+        return 2;
     }
 
     private Map<String, Object> buildKeyframePayload(List<KeyframeEntity> keyframes, Set<Integer> targetShotNos, int version) {

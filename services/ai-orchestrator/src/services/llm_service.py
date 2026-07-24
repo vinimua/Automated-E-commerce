@@ -4,7 +4,6 @@
 import asyncio
 import base64
 import json
-import os
 import logging
 from urllib.parse import urlparse
 
@@ -477,16 +476,10 @@ async def call_llm_with_images(
             "Use image/video generation services for paid media generation."
         )
 
-    provider = (settings.vision_llm_provider or settings.text_llm_provider).lower()
     vision_model = settings.vision_llm_model or model
     if vision_model == "gpt-4o":
         vision_model = settings.text_llm_model
     clean_image_urls = [url for url in image_urls if isinstance(url, str) and url.strip()]
-
-    if provider not in {"openai", "openai_compatible"}:
-        raise RuntimeError(
-            f"Vision input is only wired for OpenAI-compatible providers, got: {settings.text_llm_provider}"
-        )
 
     return await _call_openai_vision(task_type, system_prompt, user_prompt, clean_image_urls, vision_model)
 
@@ -525,13 +518,7 @@ async def _call_openai_vision(
     image_urls: list[str],
     model: str,
 ) -> dict:
-    """Call a vision model via OpenAI-compatible or Volcengine Responses API."""
-    provider = (settings.vision_llm_provider or settings.text_llm_provider).lower()
-    if provider == "volcengine_responses":
-        return await _call_volcengine_responses(
-            task_type, system_prompt, user_prompt, image_urls, None, model
-        )
-
+    """Call an OpenAI-compatible vision model with image_url inputs."""
     try:
         from openai import AsyncOpenAI
     except ImportError:
@@ -574,89 +561,6 @@ async def _call_openai_vision(
     return _parse_llm_json(content_text)
 
 
-async def _call_volcengine_responses(
-    task_type: str,
-    system_prompt: str,
-    user_prompt: str,
-    image_urls: list[str],
-    video_url: str | None,
-    model: str,
-) -> dict:
-    """Call Volcengine Responses API (/api/v3/responses) for vision tasks.
-
-    Supports images (input_image) and video (input_video).
-    """
-    api_key = settings.vision_llm_api_key or settings.text_llm_api_key or settings.openai_api_key
-    base_url = settings.vision_llm_base_url or settings.text_llm_base_url or settings.openai_base_url or "https://ark.cn-beijing.volces.com/api/v3"
-
-    # Build content blocks for the "input" array
-    content_blocks: list[dict] = []
-
-    # Add video if present
-    if video_url:
-        content_blocks.append({"type": "input_video", "video_url": video_url})
-
-    # Add images
-    prepared_image_urls = await _prepare_vision_image_urls(image_urls) if image_urls else []
-    for url in prepared_image_urls:
-        content_blocks.append({"type": "input_image", "image_url": url})
-
-    # Add text prompt
-    full_text = f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt
-    content_blocks.append({"type": "input_text", "text": full_text})
-
-    body = {
-        "model": model,
-        "input": [{"role": "user", "content": content_blocks}],
-    }
-
-    log.info(
-        "Volcengine Responses API: task_type=%s, model=%s, images=%d, video=%s",
-        task_type, model, len(prepared_image_urls), bool(video_url),
-    )
-
-    transport = httpx.AsyncHTTPTransport(retries=0)
-    async with httpx.AsyncClient(
-        transport=transport,
-        timeout=httpx.Timeout(settings.text_llm_timeout_seconds),
-    ) as client:
-        resp = await client.post(
-            f"{base_url}/responses",
-            json=body,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-        )
-        if not resp.is_success:
-            raise RuntimeError(
-                f"Volcengine Responses API error: HTTP {resp.status_code} - {resp.text[:500]}"
-            )
-        data = resp.json()
-
-    # Extract output text
-    output_list = data.get("output") or []
-    content_text = "{}"
-    for output_item in output_list:
-        if output_item.get("role") == "assistant":
-            for block in output_item.get("content") or []:
-                if block.get("type") == "output_text":
-                    t = block.get("text") or ""
-                    if t.strip():
-                        content_text = t
-                        break
-            if content_text != "{}":
-                break
-
-    usage = data.get("usage") or {}
-    tokens_in = usage.get("input_tokens") or usage.get("prompt_tokens") or 0
-    tokens_out = usage.get("output_tokens") or usage.get("completion_tokens") or 0
-
-    log.info(
-        "Volcengine Responses API complete: task_type=%s, model=%s, tokens_in=%d, tokens_out=%d",
-        task_type, model, tokens_in, tokens_out,
-    )
-    return _parse_llm_json(content_text)
 
 
 async def _prepare_vision_image_urls(image_urls: list[str]) -> list[str]:
@@ -782,7 +686,7 @@ async def _call_anthropic(task_type: str, system_prompt: str, user_prompt: str, 
     client = AsyncAnthropic(api_key=api_key, base_url=base_url)
     response = await client.messages.create(
         model=model or "claude-sonnet-4-6",
-        max_tokens=4096,
+        max_tokens=16384,
         system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
     )

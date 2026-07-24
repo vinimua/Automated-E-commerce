@@ -33,7 +33,7 @@ class FashionKeyframeWorkflow:
             prompts = await workflow.execute_activity(
                 "generate_keyframe_prompts",
                 args=[task_id, storyboard],
-                start_to_close_timeout=timedelta(seconds=30),
+                start_to_close_timeout=timedelta(minutes=2),
                 retry_policy=retry,
             )
         except Exception as e:

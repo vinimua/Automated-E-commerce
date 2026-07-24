@@ -1,7 +1,7 @@
 "use client";
 
 import { apiRequest } from "@/lib/api-client";
-import type { VideoTask } from "@/types/api";
+import type { VideoTask, TaskAsset } from "@/types/api";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
@@ -60,6 +60,7 @@ export default function KeyframesPage() {
   const [keyframes, setKeyframes] = useState<KeyframeItem[]>([]);
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [storyboard, setStoryboard] = useState<StoryboardData | null>(null);
+  const [assetImages, setAssetImages] = useState<TaskAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -72,10 +73,11 @@ export default function KeyframesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [batchGenerating, setBatchGenerating] = useState(false);
   const [regeneratingKeyframeId, setRegeneratingKeyframeId] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [taskRes, kfRes, sbRes] = await Promise.all([
+      const [taskRes, kfRes, sbRes, assetRes] = await Promise.all([
         apiRequest<{ code: number; message: string; data: VideoTask }>(`/api/video-tasks/${id}`),
         apiRequest<{ code: number; message: string; data: { taskId: string; keyframes: KeyframeItem[] } }>(
           `/api/video-tasks/${id}/keyframes`
@@ -83,12 +85,18 @@ export default function KeyframesPage() {
         apiRequest<{ code: number; message: string; data: StoryboardData }>(
           `/api/video-tasks/${id}/storyboard`
         ),
+        apiRequest<{ code: number; message: string; data: { taskId: string; assets: TaskAsset[] } }>(
+          `/api/video-tasks/${id}/assets`
+        ).catch(() => null),
       ]);
       if (taskRes.code === 0 && taskRes.data) setTask(taskRes.data);
       if (kfRes.code === 0 && kfRes.data) setKeyframes(kfRes.data.keyframes || []);
       if (sbRes.code === 0 && sbRes.data) {
         setShots(sbRes.data.shots || []);
         setStoryboard(sbRes.data);
+      }
+      if (assetRes && assetRes.code === 0 && assetRes.data) {
+        setAssetImages(assetRes.data.assets?.filter((a: TaskAsset) => a.assetKind === "image" && a.url) || []);
       }
     } catch (e: any) {
       setError(e.message || "加载失败");
@@ -331,6 +339,26 @@ export default function KeyframesPage() {
         </div>
       )}
 
+      {/* Asset images used as generation reference */}
+      {assetImages.length > 0 && (
+        <div className="rounded-lg border bg-card p-4 space-y-2">
+          <h3 className="text-sm font-semibold">生成参考图（{assetImages.length} 张）</h3>
+          <p className="text-xs text-muted-foreground">AI 关键帧生成时会参考以下商品图片</p>
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {assetImages.map((a) => (
+              <img
+                key={a.assetId}
+                src={a.url!}
+                alt={a.assetRole || "素材"}
+                className="h-20 w-20 rounded-md border object-cover bg-muted cursor-pointer hover:ring-2 ring-primary shrink-0"
+                onClick={() => setPreviewUrl(a.url!)}
+                title={`${a.assetRole}${a.source === "ai_generated" ? " (AI生成)" : ""}`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Batch generate banner */}
       {canConfigure && unconfiguredShots.length > 0 && (
         <div className="rounded-lg border-2 border-dashed border-primary/50 bg-primary/5 p-6">
@@ -408,7 +436,8 @@ export default function KeyframesPage() {
                 {/* Keyframe preview */}
                 {kf?.url && (
                   <img src={kf.url} alt={`Shot ${shotNo}`}
-                    className="w-full h-40 object-cover rounded-md mb-3 bg-muted" />
+                    onClick={() => setPreviewUrl(kf.url!)}
+                    className="w-full h-40 object-cover rounded-md mb-3 bg-muted cursor-pointer hover:opacity-90 transition-opacity" />
                 )}
 
                 {/* Generating state */}
@@ -525,6 +554,21 @@ export default function KeyframesPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Image preview modal */}
+      {previewUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 cursor-pointer"
+          onClick={() => setPreviewUrl(null)}
+        >
+          <img
+            src={previewUrl}
+            alt="预览"
+            className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
     </div>

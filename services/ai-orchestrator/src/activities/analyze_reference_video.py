@@ -1,9 +1,10 @@
-"""Activity: Analyze reference video — URL-first approach, no fabrication fallback."""
+"""Activity: Analyze reference video — URL-first with download+base64 fallback. No fabrication."""
 
 import base64
 import logging
-import tempfile
 from pathlib import Path
+
+import httpx
 
 from temporalio import activity
 from src.schemas.ai_outputs import ReferenceVideoAnalysis
@@ -11,7 +12,6 @@ from src.schemas.ai_outputs import ReferenceVideoAnalysis
 log = logging.getLogger(__name__)
 
 MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024  # 100 MB
-MAX_BASE64_PAYLOAD_BYTES = 20 * 1024 * 1024  # 20 MB — keep base64 payloads reasonable
 
 
 async def _download_video(url: str) -> bytes:
@@ -43,137 +43,46 @@ def _encode_base64(data: bytes) -> str:
 async def _call_vision_with_video_url(
     task_type: str, system_prompt: str, user_prompt: str, video_url: str
 ) -> dict:
-    """Call the vision LLM with a video URL via Volcengine Responses API."""
+    """Call the vision LLM with a video URL via OpenAI-compatible API."""
     from src.config import settings
-    from src.services.llm_service import _call_volcengine_responses
+    from src.services.llm_service import _parse_llm_json
+
+    try:
+        from openai import AsyncOpenAI
+    except ImportError:
+        raise RuntimeError("openai package not installed")
+
+    api_key = settings.vision_llm_api_key or settings.text_llm_api_key or settings.openai_api_key
+    base_url = settings.vision_llm_base_url or settings.text_llm_base_url or settings.openai_base_url or None
+    vision_model = settings.vision_llm_model
+
+    client = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=settings.text_llm_timeout_seconds)
+
+    content: list[dict] = [
+        {"type": "text", "text": user_prompt},
+        {"type": "video_url", "video_url": {"url": video_url}},
+    ]
 
     is_data_url = video_url.startswith("data:")
     log.info("Vision LLM video request: model=%s, url_type=%s, url_len=%d",
-             settings.vision_llm_model, "data_url" if is_data_url else "remote_url",
+             vision_model, "data_url" if is_data_url else "remote_url",
              len(video_url))
 
-    return await _call_volcengine_responses(
-        task_type=task_type,
-        system_prompt=system_prompt,
-        user_prompt=user_prompt,
-        image_urls=[],
-        video_url=video_url,
-        model=settings.vision_llm_model,
+    response = await client.chat.completions.create(
+        model=vision_model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": content},
+        ],
+        max_tokens=8192,
     )
+    content_text = response.choices[0].message.content or "{}"
+    tokens_in = response.usage.prompt_tokens if response.usage else 0
+    tokens_out = response.usage.completion_tokens if response.usage else 0
 
-
-async def _analyze_with_frames(
-    task_type: str, system_prompt: str, user_prompt: str, video_bytes: bytes
-) -> dict:
-    """Fallback: extract frames from video and analyze via image_url.
-
-    Since we may not have ffmpeg/opencv available everywhere, this
-    attempts frame extraction using available tools and sends the
-    frames as images to the vision LLM.
-    """
-    from src.config import settings
-    from src.services.llm_service import _call_volcengine_responses
-
-    # Try to extract frames using available tools
-    frames_base64 = await _extract_frames(video_bytes)
-    if not frames_base64:
-        raise RuntimeError("Frame extraction produced no usable frames")
-
-    frame_data_uris = [f"data:image/jpeg;base64,{fb}" for fb in frames_base64]
-
-    log.info("Vision LLM frame analysis: model=%s, frames=%d", settings.vision_llm_model, len(frames_base64))
-
-    return await _call_volcengine_responses(
-        task_type=task_type,
-        system_prompt=system_prompt,
-        user_prompt=user_prompt,
-        image_urls=frame_data_uris,
-        video_url=None,
-        model=settings.vision_llm_model,
-    )
-
-
-async def _extract_frames(video_bytes: bytes, max_frames: int = 8) -> list[str]:
-    """Extract key frames from video bytes as base64 JPEG strings.
-
-    Tries multiple methods in order: opencv, ffmpeg, then Pillow-based fallback.
-    Returns empty list if no method works.
-    """
-    frames = []
-
-    # Method 1: Try opencv (most reliable)
-    try:
-        import cv2
-        import numpy as np
-        import tempfile, os
-
-        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
-            f.write(video_bytes)
-            tmp_path = f.name
-
-        try:
-            cap = cv2.VideoCapture(tmp_path)
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            if total_frames <= 0:
-                cap.release()
-                raise ValueError("Cannot read video frame count")
-
-            # Sample evenly spaced frames
-            frame_indices = [int(i * total_frames / (max_frames + 1)) for i in range(1, max_frames + 1)]
-            for idx in frame_indices:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-                ret, frame = cap.read()
-                if ret:
-                    _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
-                    frames.append(base64.b64encode(buf).decode("ascii"))
-            cap.release()
-        finally:
-            os.unlink(tmp_path)
-
-        if frames:
-            log.info("Frames extracted via opencv: %d frames", len(frames))
-            return frames
-    except ImportError:
-        log.debug("opencv not available for frame extraction")
-    except Exception as e:
-        log.warning("opencv frame extraction failed: %s", e)
-
-    # Method 2: Try ffmpeg subprocess
-    try:
-        import subprocess, tempfile, os
-
-        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
-            f.write(video_bytes)
-            input_path = f.name
-
-        output_pattern = input_path + "_frame_%03d.jpg"
-        try:
-            subprocess.run(
-                ["ffmpeg", "-y", "-i", input_path, "-vf", f"fps=1/{max(1, max_frames)}",
-                 "-frames:v", str(max_frames), "-q:v", "5", output_pattern],
-                capture_output=True, timeout=30, check=True,
-            )
-            for i in range(1, max_frames + 1):
-                frame_path = output_pattern.replace("%03d", f"{i:03d}")
-                if os.path.exists(frame_path):
-                    with open(frame_path, "rb") as ff:
-                        frames.append(base64.b64encode(ff.read()).decode("ascii"))
-                    os.unlink(frame_path)
-        finally:
-            os.unlink(input_path)
-            # Clean up any remaining frame files
-            for i in range(1, max_frames + 2):
-                p = output_pattern.replace("%03d", f"{i:03d}")
-                if os.path.exists(p):
-                    os.unlink(p)
-
-        if frames:
-            log.info("Frames extracted via ffmpeg: %d frames", len(frames))
-            return frames
-    except Exception as e:
-        log.warning("ffmpeg frame extraction failed: %s", e)
-
-    return []
+    log.info("Vision LLM video call complete: model=%s, tokens_in=%d, tokens_out=%d",
+             vision_model, tokens_in, tokens_out)
+    return _parse_llm_json(content_text)
 
 
 @activity.defn
@@ -320,8 +229,7 @@ riskTips — 记录：时间点为近似值 / 音频不可辨认 / 字幕被遮�
     last_error = None
 
     # ── Strategy 1: Pass URL directly ──
-    # Volcengine servers are in China and can access most Chinese CDNs directly.
-    # This avoids the huge base64 payload entirely.
+    # Volcengine servers download the video themselves.
     try:
         activity.logger.info("Trying URL-first approach: task_id=%s", task_id)
         raw_result = await _call_vision_with_video_url(
@@ -339,22 +247,11 @@ riskTips — 记录：时间点为近似值 / 音频不可辨认 / 字幕被遮�
         )
 
     # ── Strategy 2: Download + base64 data URL ──
-    # Some CDNs require specific headers (Referer, User-Agent) that the vision
-    # model servers won't send. We download ourselves and embed as base64.
-    downloaded_bytes = None  # saved for potential reuse in strategy 3
+    # For localhost/private URLs the model servers can't reach.
     try:
         activity.logger.info("Trying download+base64 approach: task_id=%s", task_id)
-        downloaded_bytes = await _download_video(reference_url)
-
-        # Check if base64 payload is reasonable
-        if len(downloaded_bytes) > MAX_BASE64_PAYLOAD_BYTES:
-            raise ValueError(
-                f"Video too large for base64 embedding: {len(downloaded_bytes)} bytes "
-                f"(max {MAX_BASE64_PAYLOAD_BYTES}). The video must be downloaded "
-                f"by the model server — try a smaller file or a different URL."
-            )
-
-        video_data_url = _encode_base64(downloaded_bytes)
+        video_bytes = await _download_video(reference_url)
+        video_data_url = _encode_base64(video_bytes)
         raw_result = await _call_vision_with_video_url(
             "reference_video_analysis", system_prompt, user_prompt, video_data_url
         )
@@ -362,43 +259,16 @@ riskTips — 记录：时间点为近似值 / 音频不可辨认 / 字幕被遮�
         activity.logger.info("Reference video analysis (download+base64) complete: title=%s, shots=%d",
                              result.get("title"), len(result.get("shots", [])))
         return result
-
-    except Exception as e:
-        last_error = e
-        activity.logger.warning(
-            "Download+base64 approach failed for task_id=%s: %s. Will try frame extraction.",
-            task_id, str(e)[:200]
-        )
-
-    # ── Strategy 3: Download + extract frames → image_url ──
-    # If video_url doesn't work (e.g. model rejects base64 videos above certain size),
-    # extract key frames and analyze them as images. We lose temporal info but still
-    # get real visual analysis from actual frames.
-    try:
-        activity.logger.info("Trying frame extraction approach: task_id=%s", task_id)
-        if downloaded_bytes is None:
-            downloaded_bytes = await _download_video(reference_url)
-        raw_result = await _analyze_with_frames(
-            "reference_video_analysis", system_prompt, user_prompt, downloaded_bytes
-        )
-        result = validate_and_repair(raw_result, ReferenceVideoAnalysis).model_dump()
-        activity.logger.info("Reference video analysis (frames) complete: title=%s, shots=%d",
-                             result.get("title"), len(result.get("shots", [])))
-        return result
-
     except Exception as e:
         last_error = e
         activity.logger.error(
-            "Frame extraction approach also failed for task_id=%s: %s",
+            "Download+base64 approach also failed for task_id=%s: %s",
             task_id, str(e)[:200]
         )
 
     # ── All strategies exhausted — fail honestly ──
-    # We NEVER fabricate an analysis via text LLM. If the vision model can't
-    # process the video, the task should fail with a clear error so the user
-    # knows the analysis didn't work, instead of seeing made-up data.
     error_msg = (
-        f"All 3 video analysis strategies failed for task {task_id}. "
+        f"Both video analysis strategies failed for task {task_id}. "
         f"Last error: {last_error}"
     )
     activity.logger.error(error_msg)

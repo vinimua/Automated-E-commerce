@@ -123,6 +123,9 @@ class VolcengineImageProvider(ImageGenerationProvider):
         else:
             log.warning("VolcengineImageProvider: text-to-image mode — NO refs downloaded! %d URLs attempted", len(ref_urls))
 
+        extra_body["response_format"] = "url"
+        extra_body["watermark"] = False
+
         response = await client.images.generate(
             model=self._model,
             prompt=full_prompt,

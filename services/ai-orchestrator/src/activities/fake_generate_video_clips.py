@@ -15,12 +15,15 @@ FAKE_VIDEO_URL = "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/
 
 
 @activity.defn
-async def fake_generate_video_clips(task_id: str, prompts: dict, storyboard: dict) -> dict:
+async def fake_generate_video_clips(task_id: str, prompts: dict, storyboard: dict, keyframes: dict = None) -> dict:
     """Generate video clips for each shot.
 
     Routes to the configured provider (real or fake). Individual per-shot
     failures are captured as failed clip entries rather than aborting
     the entire batch.
+
+    When keyframes are provided, the confirmed keyframe image is passed
+    as source_images for image-to-video generation.
     """
     provider = get_video_provider()
     prompt_items = prompts.get("prompts", [])
@@ -40,6 +43,15 @@ async def fake_generate_video_clips(task_id: str, prompts: dict, storyboard: dic
                 "duration": shot.get("duration", 3),
             })
 
+    # Build keyframe lookup by shotNo for image-to-video reference
+    keyframe_by_shot: dict[int, dict] = {}
+    if keyframes:
+        for kf in keyframes.get("keyframes", []):
+            sn = kf.get("shotNo", 0)
+            url = kf.get("url")
+            if sn > 0 and url:
+                keyframe_by_shot[sn] = kf
+
     clips = []
     for item in prompt_items:
         shot_no = int(item.get("shotNo") or 0)
@@ -50,12 +62,19 @@ async def fake_generate_video_clips(task_id: str, prompts: dict, storyboard: dic
         negative = item.get("negativePrompt") or "blurry, low quality, watermark, text, jitter"
         duration = int(item.get("duration") or 3)
 
+        # Use confirmed keyframe as first-frame reference for image-to-video
+        source_images = []
+        kf = keyframe_by_shot.get(shot_no)
+        if kf and kf.get("url"):
+            source_images = [{"url": kf["url"]}]
+
         try:
             result = await provider.generate(
                 prompt=prompt_text,
                 negative_prompt=negative,
                 shot_no=shot_no,
                 duration=duration,
+                source_images=source_images,
             )
             clips.append({
                 "shotNo": shot_no,

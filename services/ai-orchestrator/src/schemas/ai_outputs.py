@@ -174,10 +174,10 @@ class ShotItem(StrictModel):
     """Single storyboard shot."""
 
     shotNo: int = Field(ge=1)
-    duration: int = Field(ge=1, le=8)
+    duration: float = Field(ge=1.0, le=8.0)
     scene: str = Field(min_length=1)
     action: str = ""
-    subtitle: str = Field(min_length=1, max_length=90)
+    subtitle: str = Field(default="", max_length=90)
     materialType: MaterialTypeEnum
     prompt: str = ""
     negativePrompt: str = ""
